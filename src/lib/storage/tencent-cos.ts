@@ -1,0 +1,223 @@
+import COS from 'cos-nodejs-sdk-v5';
+
+import type {
+  AbortMultipartUploadInput,
+  CheckStorageCredentialsInput,
+  CheckStorageCredentialsResult,
+  CompleteMultipartUploadInput,
+  CompleteMultipartUploadResult,
+  CreateMultipartUploadInput,
+  CreateMultipartUploadResult,
+  CreateSingleUploadUrlInput,
+  DeleteObjectInput,
+  DeleteObjectResult,
+  HeadObjectInput,
+  HeadObjectResult,
+  ListStorageBucketsResult,
+  ListStorageObjectsInput,
+  ListStorageObjectsResult,
+  PresignMultipartPartInput,
+  PresignedUploadUrl,
+  StorageAdapter,
+  StorageAdapterConfig,
+} from './types';
+import {
+  basenameFromObjectPath,
+  createPresignedUploadUrl,
+  dateFromUnknown,
+  normalizeErrorInfo,
+  normalizeExpiresInSeconds,
+  normalizeListLimit,
+  normalizeObjectKey,
+  normalizeOptionalString,
+  normalizePrefix,
+  numberFromUnknown,
+} from './utils';
+
+export class TencentCosStorageAdapter implements StorageAdapter {
+  readonly provider = 'tencent_cos' as const;
+  private readonly client: COS;
+  private readonly region: string;
+
+  constructor(config: StorageAdapterConfig) {
+    this.region = normalizeOptionalString(config.region) ?? 'ap-guangzhou';
+    this.client = new COS({
+      SecretId: config.accessKeyId,
+      SecretKey: config.secretAccessKey,
+      Domain: normalizeOptionalString(config.endpoint),
+      ForcePathStyle: config.forcePathStyle ?? undefined,
+      ...(config.extraConfig ?? {}),
+    });
+  }
+
+  async checkCredentials(
+    input: CheckStorageCredentialsInput = {},
+  ): Promise<CheckStorageCredentialsResult> {
+    try {
+      if (input.bucket) {
+        await this.client.headBucket({
+          Bucket: input.bucket,
+          Region: this.region,
+        });
+      } else {
+        await this.client.getService({ Region: this.region });
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: normalizeErrorInfo(error) };
+    }
+  }
+
+  async listBuckets(): Promise<ListStorageBucketsResult> {
+    const output = await this.client.getService({ Region: this.region });
+    return {
+      buckets:
+        output.Buckets?.map((bucket) => ({
+          name: bucket.Name,
+          region: bucket.Location,
+          createdAt: dateFromUnknown(bucket.CreationDate),
+        })) ?? [],
+      isTruncated: false,
+    };
+  }
+
+  async listObjects(
+    input: ListStorageObjectsInput,
+  ): Promise<ListStorageObjectsResult> {
+    const output = await this.client.getBucket({
+      Bucket: input.bucket,
+      Region: this.region,
+      Prefix: normalizePrefix(input.prefix),
+      Delimiter: input.delimiter ?? '/',
+      Marker: input.cursor,
+      MaxKeys: normalizeListLimit(input.limit),
+    });
+    const folders =
+      output.CommonPrefixes?.map((prefix) => ({
+        kind: 'directory' as const,
+        name: basenameFromObjectPath(prefix.Prefix),
+        path: prefix.Prefix,
+      })) ?? [];
+    const files =
+      output.Contents?.map((object) => ({
+        kind: 'file' as const,
+        name: basenameFromObjectPath(object.Key),
+        path: object.Key,
+        size: numberFromUnknown(object.Size),
+        updatedAt: dateFromUnknown(object.LastModified),
+        etag: object.ETag,
+        storageClass: object.StorageClass,
+      })) ?? [];
+    return {
+      items: [...folders, ...files],
+      nextCursor: output.NextMarker,
+      isTruncated: output.IsTruncated === 'true',
+    };
+  }
+
+  async createSingleUploadUrl(
+    input: CreateSingleUploadUrlInput,
+  ): Promise<PresignedUploadUrl> {
+    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
+    const url = this.client.getObjectUrl({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+      Sign: true,
+      Method: 'PUT',
+      Expires: expiresInSeconds,
+    });
+    return createPresignedUploadUrl('PUT', url, expiresInSeconds);
+  }
+
+  async createMultipartUpload(
+    input: CreateMultipartUploadInput,
+  ): Promise<CreateMultipartUploadResult> {
+    const output = await this.client.multipartInit({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+      ContentType: input.contentType,
+    });
+    return { bucket: input.bucket, key: input.key, uploadId: output.UploadId };
+  }
+
+  async presignMultipartPart(
+    input: PresignMultipartPartInput,
+  ): Promise<PresignedUploadUrl> {
+    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
+    const url = this.client.getObjectUrl({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+      Sign: true,
+      Method: 'PUT',
+      Expires: expiresInSeconds,
+      Query: {
+        uploadId: input.uploadId,
+        partNumber: input.partNumber,
+      },
+    });
+    return createPresignedUploadUrl('PUT', url, expiresInSeconds);
+  }
+
+  async completeMultipartUpload(
+    input: CompleteMultipartUploadInput,
+  ): Promise<CompleteMultipartUploadResult> {
+    const output = await this.client.multipartComplete({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+      UploadId: input.uploadId,
+      Parts: input.parts.map((part) => ({
+        PartNumber: part.partNumber,
+        ETag: part.etag,
+      })),
+    });
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      etag: output.ETag,
+      location: output.Location,
+    };
+  }
+
+  async abortMultipartUpload(input: AbortMultipartUploadInput) {
+    await this.client.multipartAbort({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+      UploadId: input.uploadId,
+    });
+  }
+
+  async deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult> {
+    await this.client.deleteObject({
+      Bucket: input.bucket,
+      Region: this.region,
+      Key: normalizeObjectKey(input.key),
+    });
+    return { bucket: input.bucket, key: input.key };
+  }
+
+  async headObject(input: HeadObjectInput): Promise<HeadObjectResult | null> {
+    try {
+      const output = await this.client.headObject({
+        Bucket: input.bucket,
+        Region: this.region,
+        Key: normalizeObjectKey(input.key),
+      });
+      return {
+        bucket: input.bucket,
+        key: input.key,
+        etag: output.ETag,
+      };
+    } catch (error) {
+      const info = normalizeErrorInfo(error);
+      if (info.statusCode === 404 || info.code === 'NoSuchKey') {
+        return null;
+      }
+      throw error;
+    }
+  }
+}
