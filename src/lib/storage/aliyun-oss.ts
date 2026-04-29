@@ -36,16 +36,36 @@ import {
   stringFromUnknown,
 } from './utils';
 
+const DEFAULT_ALIYUN_REGION = 'cn-hangzhou';
+
+function aliyunRegionForSdk(region?: string | null) {
+  const value = normalizeOptionalString(region) ?? DEFAULT_ALIYUN_REGION;
+  return value.startsWith('oss-') ? value : `oss-${value}`;
+}
+
+function aliyunEndpointFromRegion(region: string) {
+  return `https://${aliyunRegionForSdk(region)}.aliyuncs.com`;
+}
+
+function aliyunRegionForApp(region?: string) {
+  return region?.replace(/^oss-/, '');
+}
+
 export class AliyunOssStorageAdapter implements StorageAdapter {
   readonly provider = 'aliyun_oss' as const;
   private readonly client: OSS;
 
   constructor(config: StorageAdapterConfig) {
+    const region = aliyunRegionForSdk(config.region);
+    const endpoint =
+      normalizeOptionalString(config.endpoint) ??
+      aliyunEndpointFromRegion(region);
+
     this.client = new OSS({
       accessKeyId: config.accessKeyId,
       accessKeySecret: config.secretAccessKey,
-      region: normalizeOptionalString(config.region),
-      endpoint: normalizeOptionalString(config.endpoint),
+      region,
+      endpoint,
       stsToken: normalizeOptionalString(config.sessionToken),
       authorizationV4: true,
       ...(config.extraConfig ?? {}),
@@ -73,7 +93,7 @@ export class AliyunOssStorageAdapter implements StorageAdapter {
       buckets:
         output.buckets?.map((bucket) => ({
           name: bucket.name,
-          region: bucket.region,
+          region: aliyunRegionForApp(bucket.region),
           createdAt: dateFromUnknown(bucket.creationDate),
           storageClass: bucket.storageClass,
         })) ?? [],

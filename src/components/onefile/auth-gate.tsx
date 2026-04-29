@@ -2,14 +2,6 @@
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -18,11 +10,8 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { LockKeyhole, LogIn } from 'lucide-react';
-import { useState } from 'react';
 
 export function AuthGate() {
-  const [open, setOpen] = useState(true);
-
   return (
     <div className="flex min-h-[calc(100vh-7rem)] items-center justify-center p-4">
       <Empty className="max-w-xl border">
@@ -44,26 +33,6 @@ export function AuthGate() {
           </Button>
         </EmptyContent>
       </Empty>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>连接 GitHub</DialogTitle>
-            <DialogDescription>
-              登录后即可配置对象存储账号，浏览 bucket，并通过 presigned URL
-              上传文件。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button asChild>
-              <a href="/api/auth/github/start">
-                <LogIn data-icon="inline-start" />
-                继续授权
-              </a>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

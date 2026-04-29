@@ -27,6 +27,7 @@ export type StorageAccount = {
   compartment_id?: string | null;
   access_key_id?: string | null;
   credential_hint?: string | null;
+  extra_config?: Record<string, unknown> | null;
   status?: 'active' | 'inactive' | 'error' | string;
   last_checked_at?: string | null;
   last_error?: string | null;
@@ -48,7 +49,6 @@ export type StorageBucket = {
   public_base_url?: string | null;
   visibility?: 'private' | 'public' | string;
   is_default?: boolean | number;
-  cors_status?: 'unknown' | 'ok' | 'error' | string;
   last_checked_at?: string | null;
   last_error?: string | null;
 };
@@ -78,7 +78,7 @@ export type FileApiToken = {
   name: string;
   token_prefix?: string | null;
   description?: string | null;
-  scopes?: string;
+  scopes?: string | string[];
   status?: 'active' | 'inactive' | string;
   last_used_at?: string | null;
   expires_at?: string | null;
@@ -134,7 +134,8 @@ export type ApiEnvelope<T> = {
 export type ApiFailure = {
   data: null;
   error: {
-    code: string;
+    code: number;
+    type?: string;
     message: string;
     details?: unknown;
   };

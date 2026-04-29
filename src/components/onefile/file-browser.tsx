@@ -1,24 +1,15 @@
 'use client';
 
-import { deleteFile, listFiles } from '@/components/onefile/api';
+import { deleteFiles, listFiles } from '@/components/onefile/api';
 import { FileTable } from '@/components/onefile/file-table';
 import {
   buildAddress,
   normalizePrefix,
   parentPrefix,
   parseAddress,
-  pathSegments,
 } from '@/components/onefile/path';
 import type { FileItem, StorageBucket } from '@/components/onefile/types';
 import { UploadPanel } from '@/components/onefile/upload-panel';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -33,34 +24,28 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@/components/ui/input-group';
-import { Separator } from '@/components/ui/separator';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Boxes,
-  FolderOpen,
-  Home,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Boxes, RefreshCw, Search } from 'lucide-react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export function FileBrowser({
   bucket,
+  prefix,
+  onPrefixChange,
   onOpenAccounts,
 }: {
   bucket: StorageBucket | null;
+  prefix: string;
+  onPrefixChange: (prefix: string) => void;
   onOpenAccounts: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [prefix, setPrefix] = useState('');
   const [search, setSearch] = useState('');
   const [address, setAddress] = useState('');
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    setPrefix('');
     setSearch('');
   }, [bucket?.id]);
 
@@ -81,13 +66,13 @@ export function FileBrowser({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (item: FileItem) =>
-      deleteFile({
+    mutationFn: (items: FileItem[]) =>
+      deleteFiles({
         bucket_id: bucket!.id,
-        object_key: item.path,
+        object_keys: items.map((item) => item.path),
       }),
-    onSuccess: async () => {
-      toast.success('对象已删除');
+    onSuccess: async (_data, items) => {
+      toast.success(items.length > 1 ? '文件已批量删除' : '对象已删除');
       await queryClient.invalidateQueries({
         queryKey: ['onefile', 'files', bucket?.id],
       });
@@ -96,20 +81,18 @@ export function FileBrowser({
       toast.error(error instanceof Error ? error.message : '删除失败'),
   });
 
-  const crumbs = useMemo(() => pathSegments(prefix), [prefix]);
-
   const refresh = () => {
     void filesQuery.refetch();
   };
 
   const openFolder = (item: FileItem) => {
     if (item.kind !== 'folder') return;
-    setPrefix(normalizePrefix(item.path));
+    onPrefixChange(normalizePrefix(item.path));
   };
 
   const submitAddress = () => {
     if (!bucket) return;
-    setPrefix(parseAddress(address, bucket.name));
+    onPrefixChange(parseAddress(address, bucket.name));
   };
 
   if (!bucket) {
@@ -135,47 +118,43 @@ export function FileBrowser({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-3 border-b p-3">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-          <InputGroup className="xl:flex-1">
-            <InputGroupAddon align="inline-start">
-              <InputGroupButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setPrefix((current) => parentPrefix(current))}
-              >
-                <ArrowLeft />
-                <span className="sr-only">返回上级</span>
-              </InputGroupButton>
-            </InputGroupAddon>
-            <InputGroupInput
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              onBlur={() => setAddress(buildAddress(bucket.name, prefix))}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  submitAddress();
-                }
-              }}
-              aria-label="当前目录地址"
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={refresh}
-              >
-                <RefreshCw
-                  className={filesQuery.isFetching ? 'animate-spin' : undefined}
-                />
-                <span className="sr-only">刷新目录</span>
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex min-w-0 items-start gap-2 px-4 py-3 border-b shrink-0">
+        <InputGroup className="min-w-0 flex-1">
+          <InputGroupAddon align="inline-start">
+            <InputGroupButton
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => onPrefixChange(parentPrefix(prefix))}
+            >
+              <ArrowLeft />
+              <span className="sr-only">返回上级</span>
+            </InputGroupButton>
+          </InputGroupAddon>
+          <InputGroupInput
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            onBlur={() => setAddress(buildAddress(bucket.name, prefix))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                submitAddress();
+              }
+            }}
+            aria-label="当前目录地址"
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton size="icon-sm" variant="ghost" onClick={refresh}>
+              <RefreshCw
+                className={filesQuery.isFetching ? 'animate-spin' : undefined}
+              />
+              <span className="sr-only">刷新目录</span>
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
 
-          <InputGroup className="xl:w-72">
+        <div className="flex shrink-0 items-start gap-2 ">
+          <InputGroup className="w-56 lg:w-72">
             <InputGroupAddon align="inline-start">
               <Search />
             </InputGroupAddon>
@@ -185,60 +164,27 @@ export function FileBrowser({
               placeholder="搜索文件"
             />
           </InputGroup>
+
+          <UploadPanel
+            bucket={bucket}
+            prefix={prefix}
+            onCompleted={refresh}
+            className="shrink-0"
+          />
         </div>
-
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <button type="button" onClick={() => setPrefix('')}>
-                  <Home />
-                  {bucket.name}
-                </button>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            {crumbs.map((crumb, index) => (
-              <BreadcrumbItem key={crumb.prefix}>
-                <BreadcrumbSeparator />
-                {index === crumbs.length - 1 ? (
-                  <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink asChild>
-                    <button
-                      type="button"
-                      onClick={() => setPrefix(crumb.prefix)}
-                    >
-                      {crumb.label}
-                    </button>
-                  </BreadcrumbLink>
-                )}
-              </BreadcrumbItem>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
-        <UploadPanel bucket={bucket} prefix={prefix} onCompleted={refresh} />
-        <Separator />
-        <FileTable
-          items={filesQuery.data?.items || []}
-          loading={filesQuery.isLoading}
-          error={
-            filesQuery.error instanceof Error ? filesQuery.error.message : null
-          }
-          deleting={deleteMutation.isPending}
-          onOpenFolder={openFolder}
-          onDeleteFile={(item) => deleteMutation.mutate(item)}
-        />
-      </div>
-
-      <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
-        <span>
-          <FolderOpen /> {prefix || '/'}
-        </span>
-        <span>{filesQuery.data?.items.length || 0} items</span>
-      </div>
+      <FileTable
+        bucket={bucket}
+        items={filesQuery.data?.items || []}
+        loading={filesQuery.isLoading}
+        error={
+          filesQuery.error instanceof Error ? filesQuery.error.message : null
+        }
+        deleting={deleteMutation.isPending}
+        onOpenFolder={openFolder}
+        onDeleteFiles={(items) => deleteMutation.mutate(items)}
+      />
     </section>
   );
 }

@@ -3,6 +3,20 @@ import { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['better-sqlite3'],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'www.google.com',
+        pathname: '/s2/favicons',
+      },
+      {
+        protocol: 'https',
+        hostname: 'avatars.githubusercontent.com',
+        pathname: '/**',
+      },
+    ],
+  },
 };
 
 switch (process.env.NODE_ENV) {

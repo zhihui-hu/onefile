@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import { ZodError, type ZodSchema } from 'zod';
 
-export type ApiErrorCode =
-  | 'BAD_REQUEST'
-  | 'UNAUTHORIZED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CONFLICT'
-  | 'VALIDATION_ERROR'
-  | 'PROVIDER_ERROR'
-  | 'INTERNAL_ERROR';
+export const API_ERROR_DEFINITIONS = {
+  BAD_REQUEST: { code: 4000 },
+  UNAUTHORIZED: { code: 4010 },
+  FORBIDDEN: { code: 4030 },
+  NOT_FOUND: { code: 4040 },
+  CONFLICT: { code: 4090 },
+  UPLOAD_EXPIRED: { code: 4100 },
+  VALIDATION_ERROR: { code: 4220 },
+  PROVIDER_ERROR: { code: 4600 },
+  INTERNAL_ERROR: { code: 5000 },
+} as const;
+
+export type ApiErrorCode = keyof typeof API_ERROR_DEFINITIONS;
 
 export class HttpError extends Error {
   readonly status: number;
@@ -39,8 +43,17 @@ export function fail(
   message: string,
   details?: unknown,
 ) {
+  const definition = API_ERROR_DEFINITIONS[code];
   return NextResponse.json(
-    { data: null, error: { code, message, details: details ?? null } },
+    {
+      data: null,
+      error: {
+        code: definition.code,
+        type: code,
+        message,
+        details: details ?? null,
+      },
+    },
     { status },
   );
 }

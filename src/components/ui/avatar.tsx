@@ -1,6 +1,8 @@
 'use client';
 
+import { IMAGE_BLUR_DATA_URL } from '@/lib/image';
 import { cn } from '@/lib/utils';
+import Image, { type ImageProps } from 'next/image';
 import { Avatar as AvatarPrimitive } from 'radix-ui';
 import * as React from 'react';
 
@@ -26,16 +28,26 @@ function Avatar({
 
 function AvatarImage({
   className,
+  alt = '',
+  sizes = '32px',
+  placeholder = 'blur',
+  blurDataURL = IMAGE_BLUR_DATA_URL,
+  unoptimized = true,
   ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+}: Omit<ImageProps, 'alt' | 'fill'> & {
+  alt?: string;
+}) {
   return (
-    <AvatarPrimitive.Image
-      data-slot="avatar-image"
-      className={cn(
-        'aspect-square size-full rounded-full object-cover',
-        className,
-      )}
+    <Image
       {...props}
+      data-slot="avatar-image"
+      alt={alt}
+      fill
+      sizes={sizes}
+      placeholder={placeholder}
+      blurDataURL={blurDataURL}
+      unoptimized={unoptimized}
+      className={cn('rounded-full object-cover', className)}
     />
   );
 }

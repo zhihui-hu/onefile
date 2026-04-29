@@ -27,6 +27,12 @@ export async function POST(
     if (!upload) {
       throw new HttpError(404, 'NOT_FOUND', 'Upload not found');
     }
+    if (upload.status === 'completed') {
+      throw new HttpError(409, 'CONFLICT', 'Upload already completed');
+    }
+    if (upload.status === 'aborted') {
+      return ok({ aborted: true, upload_id: upload.id });
+    }
 
     if (upload.uploadMode === 'multipart' && upload.providerUploadId) {
       const { bucket, account } = await getStorageBucketForUser(
@@ -36,6 +42,7 @@ export async function POST(
       const adapter = adapterFromAccount(account);
       await adapter.abortMultipartUpload({
         bucket: bucket.name,
+        region: bucket.region ?? undefined,
         key: upload.objectKey,
         uploadId: upload.providerUploadId,
       });

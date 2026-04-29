@@ -135,8 +135,9 @@ export const storageAccounts = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
-    uniqueIndex('idx_onefile_storage_accounts_user_name').on(
+    uniqueIndex('idx_onefile_storage_accounts_user_provider_name').on(
       table.userId,
+      table.provider,
       table.name,
     ),
     index('idx_onefile_storage_accounts_user_id').on(table.userId),
@@ -166,9 +167,6 @@ export const storageBuckets = sqliteTable(
     isDefault: integer('is_default', { mode: 'boolean' })
       .notNull()
       .default(false),
-    corsStatus: text('cors_status', { enum: ['unknown', 'ok', 'error'] })
-      .notNull()
-      .default('unknown'),
     lastCheckedAt: text('last_checked_at'),
     lastError: text('last_error'),
     createdAt: text('created_at')

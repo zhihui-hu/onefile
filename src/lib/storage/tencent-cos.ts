@@ -25,6 +25,7 @@ import {
   basenameFromObjectPath,
   createPresignedUploadUrl,
   dateFromUnknown,
+  getExtraString,
   normalizeErrorInfo,
   normalizeExpiresInSeconds,
   normalizeListLimit,
@@ -38,16 +39,33 @@ export class TencentCosStorageAdapter implements StorageAdapter {
   readonly provider = 'tencent_cos' as const;
   private readonly client: COS;
   private readonly region: string;
+  private readonly accountId?: string;
 
   constructor(config: StorageAdapterConfig) {
     this.region = normalizeOptionalString(config.region) ?? 'ap-guangzhou';
+    this.accountId = getExtraString(config, 'accountId');
+    const sdkExtraConfig = { ...(config.extraConfig ?? {}) };
+    delete sdkExtraConfig.accountId;
+
     this.client = new COS({
       SecretId: config.accessKeyId,
       SecretKey: config.secretAccessKey,
       Domain: normalizeOptionalString(config.endpoint),
       ForcePathStyle: config.forcePathStyle ?? undefined,
-      ...(config.extraConfig ?? {}),
+      ...sdkExtraConfig,
     });
+  }
+
+  private bucketName(bucket: string) {
+    if (!this.accountId || bucket.endsWith(`-${this.accountId}`)) {
+      return bucket;
+    }
+
+    return `${bucket}-${this.accountId}`;
+  }
+
+  private bucketRegion(region?: string | null) {
+    return normalizeOptionalString(region) ?? this.region;
   }
 
   async checkCredentials(
@@ -56,11 +74,11 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     try {
       if (input.bucket) {
         await this.client.headBucket({
-          Bucket: input.bucket,
-          Region: this.region,
+          Bucket: this.bucketName(input.bucket),
+          Region: this.bucketRegion(input.region),
         });
       } else {
-        await this.client.getService({ Region: this.region });
+        await this.client.getService();
       }
       return { ok: true };
     } catch (error) {
@@ -69,7 +87,7 @@ export class TencentCosStorageAdapter implements StorageAdapter {
   }
 
   async listBuckets(): Promise<ListStorageBucketsResult> {
-    const output = await this.client.getService({ Region: this.region });
+    const output = await this.client.getService();
     return {
       buckets:
         output.Buckets?.map((bucket) => ({
@@ -85,8 +103,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     input: ListStorageObjectsInput,
   ): Promise<ListStorageObjectsResult> {
     const output = await this.client.getBucket({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Prefix: normalizePrefix(input.prefix),
       Delimiter: input.delimiter ?? '/',
       Marker: input.cursor,
@@ -120,8 +138,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
   ): Promise<PresignedUploadUrl> {
     const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
     const url = this.client.getObjectUrl({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
       Sign: true,
       Method: 'PUT',
@@ -134,8 +152,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     input: CreateMultipartUploadInput,
   ): Promise<CreateMultipartUploadResult> {
     const output = await this.client.multipartInit({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
       ContentType: input.contentType,
     });
@@ -147,8 +165,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
   ): Promise<PresignedUploadUrl> {
     const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
     const url = this.client.getObjectUrl({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
       Sign: true,
       Method: 'PUT',
@@ -165,8 +183,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     input: CompleteMultipartUploadInput,
   ): Promise<CompleteMultipartUploadResult> {
     const output = await this.client.multipartComplete({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
       UploadId: input.uploadId,
       Parts: input.parts.map((part) => ({
@@ -184,8 +202,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
 
   async abortMultipartUpload(input: AbortMultipartUploadInput) {
     await this.client.multipartAbort({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
       UploadId: input.uploadId,
     });
@@ -193,8 +211,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
 
   async deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult> {
     await this.client.deleteObject({
-      Bucket: input.bucket,
-      Region: this.region,
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
       Key: normalizeObjectKey(input.key),
     });
     return { bucket: input.bucket, key: input.key };
@@ -203,8 +221,8 @@ export class TencentCosStorageAdapter implements StorageAdapter {
   async headObject(input: HeadObjectInput): Promise<HeadObjectResult | null> {
     try {
       const output = await this.client.headObject({
-        Bucket: input.bucket,
-        Region: this.region,
+        Bucket: this.bucketName(input.bucket),
+        Region: this.bucketRegion(input.region),
         Key: normalizeObjectKey(input.key),
       });
       return {

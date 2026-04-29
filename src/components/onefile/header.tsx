@@ -3,7 +3,7 @@
 import { getCurrentUser, logout } from '@/components/onefile/api';
 import { ApiTokenDialog } from '@/components/onefile/api-token-dialog';
 import { StorageAccountDialog } from '@/components/onefile/storage-account-dialog';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,8 +15,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { IMAGE_BLUR_DATA_URL } from '@/lib/image';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpenText, Boxes, KeyRound, LogIn, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -54,18 +56,26 @@ export function OneFileHeader() {
   const displayName = user?.display_name || user?.username || 'OneFile';
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
       <div className="flex h-14 items-center gap-3 px-4">
-        <Link href="/" className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold">OneFile</span>
-          <span className="truncate text-xs text-muted-foreground">
-            文件管理器
-          </span>
+        <Link
+          href="/"
+          className="flex min-w-0 items-center cursor-pointer gap-2"
+        >
+          <Image
+            src="/pwa-192x192.png"
+            alt=""
+            width={32}
+            height={32}
+            className="size-8 shrink-0 rounded-md"
+            placeholder="blur"
+            blurDataURL={IMAGE_BLUR_DATA_URL}
+          />
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/api-docs">
+            <Link href="/api-docs" target="_blank" rel="noreferrer">
               <BookOpenText data-icon="inline-start" />
               API 文档
             </Link>
@@ -77,9 +87,18 @@ export function OneFileHeader() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="用户菜单">
-                  <Avatar size="sm">
+                  <Avatar size="default">
                     {user.avatar_url && (
-                      <AvatarImage src={user.avatar_url} alt={displayName} />
+                      <Image
+                        src={user.avatar_url}
+                        alt={displayName}
+                        fill
+                        sizes="32px"
+                        className="rounded-full object-cover"
+                        placeholder="blur"
+                        blurDataURL={IMAGE_BLUR_DATA_URL}
+                        unoptimized
+                      />
                     )}
                     <AvatarFallback>{initials(displayName)}</AvatarFallback>
                   </Avatar>
@@ -105,7 +124,7 @@ export function OneFileHeader() {
                     API token 管理
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/api-docs">
+                    <Link href="/api-docs" target="_blank" rel="noreferrer">
                       <BookOpenText />
                       API 文档
                     </Link>

@@ -1,4 +1,4 @@
-import { ok, parseJson, withApiHandler } from '@/lib/api/response';
+import { parseJson, withApiHandler } from '@/lib/api/response';
 import {
   createRawApiToken,
   publicApiToken,
@@ -9,23 +9,10 @@ import { sha256 } from '@/lib/crypto';
 import { db } from '@/lib/db/client';
 import { fileApiTokens } from '@/lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
-import { z } from 'zod';
+
+import { createFileApiTokenSchema, noStoreOk } from './schema';
 
 export const runtime = 'nodejs';
-
-const scopeSchema = z.enum([
-  'files:read',
-  'files:write',
-  'files:delete',
-  'uploads:write',
-]);
-
-const createSchema = z.object({
-  name: z.string().min(1).max(80),
-  description: z.string().max(500).nullable().optional(),
-  scopes: z.array(scopeSchema).min(1),
-  expires_at: z.string().datetime().nullable().optional(),
-});
 
 export async function GET() {
   return withApiHandler(async () => {
@@ -36,14 +23,14 @@ export async function GET() {
       .where(eq(fileApiTokens.userId, user.id))
       .orderBy(desc(fileApiTokens.createdAt));
 
-    return ok({ items: tokens.map(publicApiToken) });
+    return noStoreOk({ items: tokens.map(publicApiToken) });
   });
 }
 
 export async function POST(request: Request) {
   return withApiHandler(async () => {
     const user = await requireUser();
-    const payload = await parseJson(request, createSchema);
+    const payload = await parseJson(request, createFileApiTokenSchema);
     const token = createRawApiToken();
     const now = new Date().toISOString();
 
@@ -62,6 +49,9 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    return ok({ token: publicApiToken(created), raw_token: token.rawToken });
+    return noStoreOk(
+      { token: publicApiToken(created), raw_token: token.rawToken },
+      { status: 201 },
+    );
   });
 }

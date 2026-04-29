@@ -25,8 +25,22 @@ import {
 } from '@/components/onefile/upload-utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import {
   FileArchive,
   FolderUp,
@@ -69,10 +83,12 @@ export function UploadPanel({
   bucket,
   prefix,
   onCompleted,
+  className,
 }: {
   bucket: StorageBucket | null;
   prefix: string;
   onCompleted: () => void;
+  className?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -312,7 +328,7 @@ export function UploadPanel({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-lg border p-3"
+      className={cn('flex flex-col gap-2', className)}
       onDragOver={(event) => {
         event.preventDefault();
         setDragOver(true);
@@ -330,25 +346,36 @@ export function UploadPanel({
       }}
       data-drag-over={dragOver}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          disabled={!bucket}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload data-icon="inline-start" />
-          上传文件
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!bucket}
-          onClick={() => folderInputRef.current?.click()}
-        >
-          <FolderUp data-icon="inline-start" />
-          上传文件夹
-        </Button>
-        <Badge variant="outline">拖拽/粘贴可用</Badge>
+      <div className="flex items-center gap-2">
+        <DropdownMenu>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" disabled={!bucket}>
+                    <Upload data-icon="inline-start" />
+                    上传
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>拖拽/粘贴可用</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <DropdownMenuContent align="start" className="w-36">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+                <Upload />
+                选择文件
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => folderInputRef.current?.click()}
+              >
+                <FolderUp />
+                选择文件夹
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <input
@@ -358,7 +385,7 @@ export function UploadPanel({
         className="hidden"
         onChange={async (event) => {
           if (event.target.files) {
-            enqueueFiles(await filesFromFolderInput(event.target.files));
+            enqueueFiles(Array.from(event.target.files) as UploadableFile[]);
           }
           event.currentTarget.value = '';
         }}
@@ -368,10 +395,10 @@ export function UploadPanel({
         type="file"
         multiple
         className="hidden"
-        onChange={(event) => {
-          enqueueFiles(
-            Array.from(event.target.files || []) as UploadableFile[],
-          );
+        onChange={async (event) => {
+          if (event.target.files) {
+            enqueueFiles(await filesFromFolderInput(event.target.files));
+          }
           event.currentTarget.value = '';
         }}
         {...{ webkitdirectory: '', directory: '' }}
@@ -381,7 +408,7 @@ export function UploadPanel({
         <ScrollArea className="max-h-56">
           <div className="flex flex-col gap-2 pr-2">
             {tasks.map((task) => (
-              <div key={task.id} className="rounded-lg border p-2">
+              <div key={task.id} className="rounded-lg bg-muted/40 p-2">
                 <div className="mb-2 flex items-center gap-2">
                   <FileArchive />
                   <div className="min-w-0 flex-1">

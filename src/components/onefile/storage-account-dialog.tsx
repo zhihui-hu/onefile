@@ -3,153 +3,211 @@
 import {
   createStorageAccount,
   deleteStorageAccount,
+  listBuckets,
   listStorageAccounts,
   syncBuckets,
+  updateBucket,
   updateStorageAccount,
 } from '@/components/onefile/api';
 import { providerLabel } from '@/components/onefile/format';
-import type { ProviderId, StorageAccount } from '@/components/onefile/types';
-import { Badge } from '@/components/ui/badge';
+import { StorageAccountBucketList } from '@/components/onefile/storage-account-bucket-list';
+import {
+  type AccountForm,
+  StorageAccountFormDialog,
+  buildStorageAccountPayload,
+  providerIconUrl,
+} from '@/components/onefile/storage-account-form-dialog';
+import {
+  type BucketForm,
+  StorageBucketFormDialog,
+  buildStorageBucketPayload,
+} from '@/components/onefile/storage-bucket-form-dialog';
+import type { StorageAccount, StorageBucket } from '@/components/onefile/types';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
-import { Textarea } from '@/components/ui/textarea';
+import { IMAGE_BLUR_DATA_URL } from '@/lib/image';
+import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, RefreshCw, Save, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Boxes,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
+import Image from 'next/image';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-const providers: ProviderId[] = [
-  's3',
-  'r2',
-  'b2',
-  'oci',
-  'aliyun_oss',
-  'tencent_cos',
-];
+function bucketAccountId(bucket: StorageBucket) {
+  return bucket.storage_account_id ?? bucket.storageAccountId ?? '';
+}
 
-type AccountForm = {
-  name: string;
-  provider: ProviderId;
-  region: string;
-  endpoint: string;
-  namespace: string;
-  compartment_id: string;
-  access_key_id: string;
-  secret_key: string;
-  extra_config: string;
-};
-
-const emptyForm: AccountForm = {
-  name: '',
-  provider: 's3',
-  region: '',
-  endpoint: '',
-  namespace: '',
-  compartment_id: '',
-  access_key_id: '',
-  secret_key: '',
-  extra_config: '{}',
-};
-
-function statusVariant(status?: string) {
-  if (status === 'error') return 'destructive';
-  if (status === 'inactive') return 'outline';
-  return 'secondary';
+function mutationErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 export function StorageAccountDialog({
   open,
   onOpenChange,
+  createOpen = false,
+  onCreateOpenChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    null,
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<StorageAccount | null>(null);
-  const [form, setForm] = useState<AccountForm>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<StorageAccount | null>(null);
+  const [editingBucket, setEditingBucket] = useState<StorageBucket | null>(
+    null,
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const formOpen = editorOpen || createOpen;
 
   const accountsQuery = useQuery({
     queryKey: ['onefile', 'storage-accounts'],
     queryFn: listStorageAccounts,
-    enabled: open,
+    enabled: open || formOpen,
   });
 
+  const bucketsQuery = useQuery({
+    queryKey: ['onefile', 'buckets'],
+    queryFn: listBuckets,
+    enabled: open || formOpen,
+  });
+
+  const accounts = useMemo(
+    () => accountsQuery.data || [],
+    [accountsQuery.data],
+  );
+  const buckets = useMemo(() => bucketsQuery.data || [], [bucketsQuery.data]);
+  const selectedAccount = useMemo(
+    () =>
+      accounts.find((account) => String(account.id) === selectedAccountId) ||
+      null,
+    [accounts, selectedAccountId],
+  );
+  const selectedBuckets = useMemo(
+    () =>
+      selectedAccount
+        ? buckets.filter(
+            (bucket) =>
+              String(bucketAccountId(bucket)) === String(selectedAccount.id),
+          )
+        : [],
+    [buckets, selectedAccount],
+  );
+
+  useEffect(() => {
+    if (createOpen) {
+      setEditing(null);
+    }
+  }, [createOpen]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (!accounts.length) {
+      setSelectedAccountId(null);
+      return;
+    }
+
+    if (
+      selectedAccountId &&
+      accounts.some((account) => String(account.id) === selectedAccountId)
+    ) {
+      return;
+    }
+
+    setSelectedAccountId(String(accounts[0].id));
+  }, [accounts, open, selectedAccountId]);
+
+  const invalidateAccounts = () =>
+    queryClient.invalidateQueries({
+      queryKey: ['onefile', 'storage-accounts'],
+    });
+
+  const invalidateBuckets = () =>
+    queryClient.invalidateQueries({ queryKey: ['onefile', 'buckets'] });
+
   const invalidateStorage = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: ['onefile', 'storage-accounts'],
-      }),
-      queryClient.invalidateQueries({ queryKey: ['onefile', 'buckets'] }),
-    ]);
+    await Promise.all([invalidateAccounts(), invalidateBuckets()]);
   };
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      let extraConfig: unknown = {};
+    mutationFn: async (values: AccountForm) => {
+      const wasEditing = Boolean(editing);
+      const payload = buildStorageAccountPayload(values, Boolean(editing));
+      const account = editing
+        ? await updateStorageAccount(editing.id, payload)
+        : await createStorageAccount(payload);
+
       try {
-        extraConfig = form.extra_config.trim()
-          ? JSON.parse(form.extra_config)
-          : {};
-      } catch {
-        throw new Error('extra_config 必须是合法 JSON。');
+        await syncBuckets(account.id);
+      } catch (error) {
+        if (!wasEditing) {
+          await deleteStorageAccount(account.id).catch(() => undefined);
+        }
+
+        throw new Error(
+          `bucket 同步失败：${mutationErrorMessage(
+            error,
+            '请检查 Access key、Secret key、Region 和 Endpoint。',
+          )}`,
+        );
       }
 
-      const payload = {
-        name: form.name.trim(),
-        provider: form.provider,
-        region: form.region.trim() || null,
-        endpoint: form.endpoint.trim() || null,
-        namespace: form.namespace.trim() || null,
-        compartment_id: form.compartment_id.trim() || null,
-        access_key_id: form.access_key_id.trim(),
-        secret_key: form.secret_key.trim() || undefined,
-        extra_config: extraConfig,
-      };
-
-      if (editing) {
-        return updateStorageAccount(editing.id, payload);
-      }
-
-      return createStorageAccount(payload);
+      return { account, wasEditing };
     },
-    onSuccess: async () => {
-      toast.success(editing ? '存储账号已更新' : '存储账号已创建');
+    onMutate: () => {
+      setSaveError(null);
+    },
+    onSuccess: async ({ account, wasEditing }) => {
+      toast.success(wasEditing ? '存储账号已更新' : '存储账号已创建');
+      setSelectedAccountId(String(account.id));
       setEditing(null);
-      setForm(emptyForm);
+      setEditorOpen(false);
+      onCreateOpenChange?.(false);
       await invalidateStorage();
     },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : '保存失败'),
+    onError: (error) => {
+      const message = mutationErrorMessage(error, '保存失败');
+      setSaveError(message);
+      toast.error(message);
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteStorageAccount,
     onSuccess: async () => {
       toast.success('存储账号已删除');
+      setDeleteTarget(null);
       await invalidateStorage();
     },
     onError: (error) =>
@@ -166,278 +224,279 @@ export function StorageAccountDialog({
       toast.error(error instanceof Error ? error.message : '同步失败'),
   });
 
-  const selectAccount = (account: StorageAccount) => {
+  const bucketMutation = useMutation({
+    mutationFn: async (values: BucketForm) => {
+      if (!editingBucket) {
+        throw new Error('请选择 bucket。');
+      }
+
+      return updateBucket(editingBucket.id, buildStorageBucketPayload(values));
+    },
+    onSuccess: async () => {
+      toast.success('bucket 已更新');
+      setEditingBucket(null);
+      await invalidateBuckets();
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : '保存失败'),
+  });
+
+  const openCreateDialog = () => {
+    setSaveError(null);
+    setEditing(null);
+    setEditorOpen(true);
+  };
+
+  const openEditDialog = (account: StorageAccount) => {
+    setSaveError(null);
     setEditing(account);
-    setForm({
-      name: account.name,
-      provider: account.provider,
-      region: account.region || '',
-      endpoint: account.endpoint || '',
-      namespace: account.namespace || '',
-      compartment_id: account.compartment_id || '',
-      access_key_id: account.access_key_id || '',
-      secret_key: '',
-      extra_config: '{}',
+    setEditorOpen(true);
+  };
+
+  const renderAccountList = () => {
+    if (accountsQuery.isLoading) {
+      return (
+        <div className="flex items-center justify-center p-6">
+          <Spinner />
+        </div>
+      );
+    }
+
+    if (!accounts.length) {
+      return (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Boxes />
+            </EmptyMedia>
+            <EmptyTitle>还没有存储账号</EmptyTitle>
+            <EmptyDescription>添加账号后可以同步 bucket。</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" onClick={openCreateDialog}>
+              <Plus data-icon="inline-start" />
+              添加账号
+            </Button>
+          </EmptyContent>
+        </Empty>
+      );
+    }
+
+    return accounts.map((account) => {
+      const selected = String(account.id) === selectedAccountId;
+      return (
+        <div
+          key={account.id}
+          className={cn(
+            'flex items-center gap-1 rounded-lg cursor-pointer',
+            selected && 'bg-muted',
+          )}
+        >
+          <Button
+            variant="ghost"
+            className="h-9 min-w-0  flex-1 justify-start gap-3 px-2"
+            onClick={() => setSelectedAccountId(String(account.id))}
+          >
+            <Image
+              alt=""
+              width={28}
+              height={28}
+              className="size-5 shrink-0 "
+              src={providerIconUrl(account.provider)}
+              placeholder="blur"
+              blurDataURL={IMAGE_BLUR_DATA_URL}
+              unoptimized
+            />
+            <span className="truncate text-sm font-medium">{account.name}</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon-sm" variant="ghost">
+                <MoreHorizontal />
+                <span className="sr-only">账号操作</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuGroup>
+                <DropdownMenuItem onSelect={() => openEditDialog(account)}>
+                  <Pencil />
+                  编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={syncMutation.isPending}
+                  onSelect={() => syncMutation.mutate(account.id)}
+                >
+                  <RefreshCw />
+                  同步桶
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteTarget(account)}
+                >
+                  <Trash2 />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      );
     });
   };
 
-  const resetForm = () => {
-    setEditing(null);
-    setForm(emptyForm);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>存储账号</DialogTitle>
-          <DialogDescription>
-            配置 S3-compatible、OSS、COS 等对象存储账号，并同步可浏览的 bucket。
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid min-h-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
-          <div className="flex max-h-[56vh] flex-col gap-2 overflow-auto rounded-lg border p-2">
-            {accountsQuery.isLoading ? (
-              <div className="flex items-center justify-center p-6">
-                <Spinner />
-              </div>
-            ) : accountsQuery.data?.length ? (
-              accountsQuery.data.map((account) => (
-                <div key={account.id} className="rounded-lg border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium">
-                          {account.name}
-                        </span>
-                        <Badge variant={statusVariant(account.status)}>
-                          {account.status || 'active'}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {providerLabel(account.provider)} ·{' '}
-                        {account.region || 'global'}
-                      </div>
-                      {account.last_error && (
-                        <div className="mt-1 text-xs text-destructive">
-                          {account.last_error}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => selectAccount(account)}
-                      >
-                        <Check />
-                        <span className="sr-only">编辑</span>
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        disabled={syncMutation.isPending}
-                        onClick={() => syncMutation.mutate(account.id)}
-                      >
-                        <RefreshCw />
-                        <span className="sr-only">同步 bucket</span>
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="destructive"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate(account.id)}
-                      >
-                        <Trash2 />
-                        <span className="sr-only">删除</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                还没有存储账号。
-              </div>
-            )}
+    <>
+      <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+        <ResponsiveDialog.Content
+          className="sm:max-w-5xl"
+          drawerClassName="max-h-[92vh]"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ">
+            <ResponsiveDialog.Header className="min-w-0 p-0 text-left">
+              <ResponsiveDialog.Title>存储账号</ResponsiveDialog.Title>
+              <ResponsiveDialog.Description>
+                管理对象存储账号，并查看每个账号已同步的 bucket。
+              </ResponsiveDialog.Description>
+            </ResponsiveDialog.Header>
+            <Button className="sm:shrink-0" onClick={openCreateDialog}>
+              <Plus data-icon="inline-end" />
+              添加
+            </Button>
           </div>
 
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveMutation.mutate();
-            }}
-          >
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="account-name">名称</FieldLabel>
-                <Input
-                  id="account-name"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  required
-                />
-              </Field>
+          <div className="grid min-h-0 gap-4 md:min-h-[520px] md:grid-cols-[minmax(220px,2fr)_minmax(0,3fr)]">
+            <section className="flex min-h-0 flex-col rounded-lg border">
+              <div className="border-b p-3">
+                <div className="text-sm font-medium">账号</div>
+              </div>
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col  p-2">{renderAccountList()}</div>
+              </ScrollArea>
+            </section>
 
-              <Field>
-                <FieldLabel>Provider</FieldLabel>
-                <Select
-                  value={form.provider}
-                  onValueChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      provider: value as ProviderId,
-                    }))
+            <section className="flex min-h-0 flex-col rounded-lg border">
+              <div className="flex items-center justify-between gap-3 border-b p-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">桶</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {selectedAccount
+                      ? `${selectedAccount.name} · ${providerLabel(selectedAccount.provider)}`
+                      : '选择左侧账号'}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!selectedAccount || syncMutation.isPending}
+                  onClick={() =>
+                    selectedAccount && syncMutation.mutate(selectedAccount.id)
                   }
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {providers.map((provider) => (
-                        <SelectItem key={provider} value={provider}>
-                          {providerLabel(provider)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="account-region">Region</FieldLabel>
-                <Input
-                  id="account-region"
-                  value={form.region}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, region: event.target.value }))
-                  }
-                  placeholder="us-east-1"
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="account-endpoint">Endpoint</FieldLabel>
-                <Input
-                  id="account-endpoint"
-                  value={form.endpoint}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      endpoint: event.target.value,
-                    }))
-                  }
-                  placeholder="https://..."
-                />
-              </Field>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="account-namespace">Namespace</FieldLabel>
-                  <Input
-                    id="account-namespace"
-                    value={form.namespace}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        namespace: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="account-compartment">
-                    Compartment
-                  </FieldLabel>
-                  <Input
-                    id="account-compartment"
-                    value={form.compartment_id}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        compartment_id: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-              </div>
-
-              <Field>
-                <FieldLabel htmlFor="account-access-key">Access key</FieldLabel>
-                <Input
-                  id="account-access-key"
-                  value={form.access_key_id}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      access_key_id: event.target.value,
-                    }))
-                  }
-                  required={!editing}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="account-secret-key">Secret key</FieldLabel>
-                <Input
-                  id="account-secret-key"
-                  type="password"
-                  value={form.secret_key}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      secret_key: event.target.value,
-                    }))
-                  }
-                  required={!editing}
-                />
-                {editing && (
-                  <FieldDescription>留空表示不更新密钥。</FieldDescription>
-                )}
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="account-extra">Extra config</FieldLabel>
-                <Textarea
-                  id="account-extra"
-                  value={form.extra_config}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      extra_config: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                />
-              </Field>
-            </FieldGroup>
-
-            <Separator />
-
-            <DialogFooter>
-              {editing && (
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  <X data-icon="inline-start" />
-                  新建
+                  {syncMutation.isPending ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <RefreshCw data-icon="inline-start" />
+                  )}
+                  同步
                 </Button>
+              </div>
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col gap-2 p-3">
+                  <StorageAccountBucketList
+                    isLoading={bucketsQuery.isLoading}
+                    selectedAccount={selectedAccount}
+                    selectedBuckets={selectedBuckets}
+                    syncPending={syncMutation.isPending}
+                    onSyncSelectedAccount={() =>
+                      selectedAccount && syncMutation.mutate(selectedAccount.id)
+                    }
+                    onEditBucket={setEditingBucket}
+                  />
+                </div>
+              </ScrollArea>
+            </section>
+          </div>
+        </ResponsiveDialog.Content>
+      </ResponsiveDialog>
+
+      <ResponsiveDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !deleteMutation.isPending) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <ResponsiveDialog.Content
+          className="sm:max-w-sm"
+          drawerClassName="max-h-[92vh]"
+        >
+          <ResponsiveDialog.Header className="p-0 text-left">
+            <ResponsiveDialog.Title>删除存储账号</ResponsiveDialog.Title>
+            <ResponsiveDialog.Description>
+              删除 {deleteTarget?.name} 后，该账号下已同步的 bucket 也会移除。
+            </ResponsiveDialog.Description>
+          </ResponsiveDialog.Header>
+          <ResponsiveDialog.Footer className="p-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteTarget(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
+            >
+              {deleteMutation.isPending ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <Trash2 data-icon="inline-start" />
               )}
-              <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <Save data-icon="inline-start" />
-                )}
-                {editing ? '保存修改' : '创建账号'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </div>
-      </DialogContent>
-    </Dialog>
+              删除
+            </Button>
+          </ResponsiveDialog.Footer>
+        </ResponsiveDialog.Content>
+      </ResponsiveDialog>
+
+      <StorageAccountFormDialog
+        open={formOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && saveMutation.isPending) return;
+
+          setEditorOpen(nextOpen);
+          onCreateOpenChange?.(nextOpen);
+          if (!nextOpen) {
+            setSaveError(null);
+            setEditing(null);
+          }
+        }}
+        account={editing}
+        pending={saveMutation.isPending}
+        errorMessage={saveError}
+        onSubmit={(values) => saveMutation.mutate(values)}
+      />
+
+      <StorageBucketFormDialog
+        open={Boolean(editingBucket)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setEditingBucket(null);
+          }
+        }}
+        bucket={editingBucket}
+        pending={bucketMutation.isPending}
+        onSubmit={(values) => bucketMutation.mutate(values)}
+      />
+    </>
   );
 }

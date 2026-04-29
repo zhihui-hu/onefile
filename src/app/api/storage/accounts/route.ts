@@ -1,7 +1,8 @@
-import { ok, parseJson, withApiHandler } from '@/lib/api/response';
+import { HttpError, ok, parseJson, withApiHandler } from '@/lib/api/response';
 import { requireUser } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { storageAccounts } from '@/lib/db/schema';
+import { type StorageAccount, storageAccounts } from '@/lib/db/schema';
+import { createStorageAdapter } from '@/lib/storage';
 import { encryptedSecret, publicStorageAccount } from '@/lib/storage-config';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -30,6 +31,58 @@ const createSchema = z.object({
   extra_config: z.record(z.string(), z.unknown()).optional(),
 });
 
+function normalizeNullableString(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function defaultRegion(provider: z.infer<typeof providerSchema>) {
+  switch (provider) {
+    case 's3':
+      return 'us-east-1';
+    case 'aliyun_oss':
+      return 'cn-hangzhou';
+    case 'tencent_cos':
+      return 'ap-guangzhou';
+    default:
+      return null;
+  }
+}
+
+function assertRequiredProviderAccountId(
+  provider: z.infer<typeof providerSchema>,
+  providerAccountId: string | null,
+) {
+  if (provider === 'r2' && !providerAccountId) {
+    throw new HttpError(
+      400,
+      'VALIDATION_ERROR',
+      '请输入 Cloudflare Account ID。',
+    );
+  }
+
+  if (provider === 'tencent_cos' && !providerAccountId) {
+    throw new HttpError(400, 'VALIDATION_ERROR', '请输入腾讯云 AppID。');
+  }
+}
+
+function throwStorageAccountConflict(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : '';
+
+  if (
+    code.startsWith('SQLITE_CONSTRAINT') &&
+    message.includes('onefile_storage_accounts')
+  ) {
+    throw new HttpError(409, 'CONFLICT', '同一仓商下已存在同名存储账号。');
+  }
+
+  throw error;
+}
+
 export async function GET() {
   return withApiHandler(async () => {
     const user = await requireUser();
@@ -47,29 +100,75 @@ export async function POST(request: Request) {
   return withApiHandler(async () => {
     const user = await requireUser();
     const payload = await parseJson(request, createSchema);
+    const region = payload.region?.trim() || defaultRegion(payload.provider);
+    const endpoint = normalizeNullableString(payload.endpoint);
+    const providerAccountId = normalizeNullableString(
+      payload.provider_account_id,
+    );
+
+    assertRequiredProviderAccountId(payload.provider, providerAccountId);
+
+    const extraConfig = { ...(payload.extra_config ?? {}) };
+    if (providerAccountId) {
+      extraConfig.accountId = providerAccountId;
+    }
+    if (payload.namespace) {
+      extraConfig.namespace = payload.namespace;
+    }
+    if (payload.compartment_id) {
+      extraConfig.compartmentId = payload.compartment_id;
+    }
+
+    const check = await createStorageAdapter({
+      provider: payload.provider,
+      accessKeyId: payload.access_key_id,
+      secretAccessKey: payload.secret_access_key,
+      region,
+      endpoint,
+      extraConfig,
+    }).checkCredentials();
+
+    if (!check.ok) {
+      throw new HttpError(
+        400,
+        'PROVIDER_ERROR',
+        `凭证校验失败：${check.error?.message ?? '请检查 Access key、Secret key、Region 和 Endpoint。'}`,
+        check.error,
+      );
+    }
+
     const now = new Date().toISOString();
     const secret = encryptedSecret(payload.secret_access_key);
 
-    const [account] = await db
-      .insert(storageAccounts)
-      .values({
-        userId: user.id,
-        name: payload.name,
-        provider: payload.provider,
-        providerAccountId: payload.provider_account_id ?? null,
-        region: payload.region ?? null,
-        endpoint: payload.endpoint ?? null,
-        namespace: payload.namespace ?? null,
-        compartmentId: payload.compartment_id ?? null,
-        accessKeyId: payload.access_key_id,
-        secretKeyCiphertext: secret.secretKeyCiphertext,
-        credentialHint: secret.credentialHint,
-        extraConfig: JSON.stringify(payload.extra_config ?? {}),
-        credentialsUpdatedAt: secret.credentialsUpdatedAt,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    let account: StorageAccount | undefined;
+    try {
+      [account] = await db
+        .insert(storageAccounts)
+        .values({
+          userId: user.id,
+          name: payload.name,
+          provider: payload.provider,
+          providerAccountId,
+          region,
+          endpoint,
+          namespace: payload.namespace ?? null,
+          compartmentId: payload.compartment_id ?? null,
+          accessKeyId: payload.access_key_id,
+          secretKeyCiphertext: secret.secretKeyCiphertext,
+          credentialHint: secret.credentialHint,
+          extraConfig: JSON.stringify(payload.extra_config ?? {}),
+          credentialsUpdatedAt: secret.credentialsUpdatedAt,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+    } catch (error) {
+      throwStorageAccountConflict(error);
+    }
+
+    if (!account) {
+      throw new HttpError(500, 'INTERNAL_ERROR', 'Storage account not created');
+    }
 
     return ok({ account: publicStorageAccount(account) });
   });

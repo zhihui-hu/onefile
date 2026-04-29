@@ -17,6 +17,24 @@ const partSchema = z.object({
   content_length: z.number().int().positive().optional(),
 });
 
+function assertUploadCanReceiveParts(upload: typeof fileUploads.$inferSelect) {
+  if (upload.status === 'completed') {
+    throw new HttpError(409, 'CONFLICT', 'Upload already completed');
+  }
+  if (upload.status === 'aborted') {
+    throw new HttpError(409, 'CONFLICT', 'Upload already aborted');
+  }
+  if (upload.status === 'failed') {
+    throw new HttpError(409, 'CONFLICT', 'Upload already failed');
+  }
+  if (
+    upload.status === 'expired' ||
+    Date.parse(upload.expiresAt) <= Date.now()
+  ) {
+    throw new HttpError(410, 'UPLOAD_EXPIRED', 'Upload session expired');
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -38,6 +56,36 @@ export async function POST(
     ) {
       throw new HttpError(404, 'NOT_FOUND', 'Multipart upload not found');
     }
+    assertUploadCanReceiveParts(upload);
+
+    const [part] = await db
+      .select()
+      .from(fileUploadParts)
+      .where(
+        and(
+          eq(fileUploadParts.uploadId, upload.id),
+          eq(fileUploadParts.partNumber, payload.part_number),
+        ),
+      )
+      .limit(1);
+
+    if (!part) {
+      throw new HttpError(400, 'BAD_REQUEST', 'Invalid part_number');
+    }
+    if (
+      payload.content_length !== undefined &&
+      payload.content_length !== part.partSize
+    ) {
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        'content_length does not match the expected part size',
+        {
+          expected_content_length: part.partSize,
+          part_number: part.partNumber,
+        },
+      );
+    }
 
     const { bucket, account } = await getStorageBucketForUser(
       auth.user.id,
@@ -46,6 +94,7 @@ export async function POST(
     const adapter = adapterFromAccount(account);
     const presigned = await adapter.presignMultipartPart({
       bucket: bucket.name,
+      region: bucket.region ?? undefined,
       key: upload.objectKey,
       uploadId: upload.providerUploadId,
       partNumber: payload.part_number,

@@ -71,6 +71,7 @@ export async function runCleanup() {
       try {
         await adapterFromAccount(row.account).abortMultipartUpload({
           bucket: row.bucket.name,
+          region: row.bucket.region ?? undefined,
           key: row.upload.objectKey,
           uploadId: row.upload.providerUploadId ?? '',
         });

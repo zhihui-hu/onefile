@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       async (key) => {
         const head = await adapter.headObject({
           bucket: bucket.name,
+          region: bucket.region ?? undefined,
           key: applyBucketKeyPrefix(bucket, key),
         });
         return Boolean(head);
@@ -81,6 +82,13 @@ export async function POST(request: NextRequest) {
     );
     const providerKey = applyBucketKeyPrefix(bucket, conflictedRelativeKey);
     const mode = uploadMode(payload.file_size, payload.upload_mode);
+    if (mode === 'multipart' && payload.file_size === 0) {
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        'Multipart upload requires a non-empty file',
+      );
+    }
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
     const uploadId = randomToken(18);
@@ -88,6 +96,7 @@ export async function POST(request: NextRequest) {
     if (mode === 'single') {
       const presigned = await adapter.createSingleUploadUrl({
         bucket: bucket.name,
+        region: bucket.region ?? undefined,
         key: providerKey,
         expiresInSeconds: 15 * 60,
         contentType: payload.mime_type,
@@ -129,6 +138,7 @@ export async function POST(request: NextRequest) {
     const totalParts = Math.max(1, Math.ceil(payload.file_size / partSize));
     const multipart = await adapter.createMultipartUpload({
       bucket: bucket.name,
+      region: bucket.region ?? undefined,
       key: providerKey,
       contentType: payload.mime_type,
     });

@@ -10,20 +10,13 @@ import { absoluteDate, formatDate } from '@/components/onefile/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,12 +35,23 @@ type TokenForm = {
 const emptyForm: TokenForm = {
   name: '',
   description: '',
-  scopes: 'files:read,files:write,files:delete',
+  scopes: 'files:read,files:write,uploads:write,files:delete',
   expires_at: '',
 };
 
 function tokenStatusVariant(status?: string) {
   return status === 'inactive' ? 'outline' : 'secondary';
+}
+
+function normalizeExpiresAt(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
+function formatScopes(scopes: string | string[] | null | undefined) {
+  if (Array.isArray(scopes)) {
+    return scopes.length > 0 ? scopes.join(',') : 'files:read';
+  }
+  return scopes || 'files:read';
 }
 
 export function ApiTokenDialog({
@@ -78,9 +82,8 @@ export function ApiTokenDialog({
         scopes: form.scopes
           .split(',')
           .map((scope) => scope.trim())
-          .filter(Boolean)
-          .join(','),
-        expires_at: form.expires_at || null,
+          .filter(Boolean),
+        expires_at: normalizeExpiresAt(form.expires_at),
       }),
     onSuccess: async (token) => {
       setForm(emptyForm);
@@ -119,14 +122,17 @@ export function ApiTokenDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>API token</DialogTitle>
-          <DialogDescription>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialog.Content
+        className="sm:max-w-2xl"
+        drawerClassName="max-h-[92vh]"
+      >
+        <ResponsiveDialog.Header className="p-0 text-left">
+          <ResponsiveDialog.Title>API token</ResponsiveDialog.Title>
+          <ResponsiveDialog.Description>
             为脚本或外部服务创建访问令牌。完整 token 只在创建后显示一次。
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialog.Description>
+        </ResponsiveDialog.Header>
 
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
           <div className="flex max-h-[54vh] flex-col gap-2 overflow-auto rounded-lg border p-2">
@@ -149,7 +155,7 @@ export function ApiTokenDialog({
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {token.token_prefix || 'of_****'} ·{' '}
-                        {token.scopes || 'files:read'}
+                        {formatScopes(token.scopes)}
                       </div>
                       <div
                         className="mt-1 text-xs text-muted-foreground"
@@ -239,7 +245,7 @@ export function ApiTokenDialog({
                   }
                 />
                 <FieldDescription>
-                  用逗号分隔，例如 files:read,files:write。
+                  用逗号分隔，例如 files:read,files:write,uploads:write。
                 </FieldDescription>
               </Field>
               <Field>
@@ -281,7 +287,7 @@ export function ApiTokenDialog({
 
             <Separator />
 
-            <DialogFooter>
+            <ResponsiveDialog.Footer className="p-0">
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? (
                   <Spinner data-icon="inline-start" />
@@ -290,10 +296,10 @@ export function ApiTokenDialog({
                 )}
                 创建 token
               </Button>
-            </DialogFooter>
+            </ResponsiveDialog.Footer>
           </form>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialog.Content>
+    </ResponsiveDialog>
   );
 }

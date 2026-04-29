@@ -15,10 +15,15 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
-const deleteSchema = z.object({
-  bucket_id: z.union([z.number().int(), z.string().min(1)]),
-  object_key: z.string().min(1),
-});
+const deleteSchema = z
+  .object({
+    bucket_id: z.union([z.number().int(), z.string().min(1)]),
+    object_key: z.string().min(1).optional(),
+    object_keys: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .refine((value) => value.object_key || value.object_keys?.length, {
+    message: 'object_key or object_keys is required',
+  });
 
 function nameFromPath(path: string) {
   const clean = path.endsWith('/') ? path.slice(0, -1) : path;
@@ -55,6 +60,7 @@ export async function GET(request: NextRequest) {
 
     const listed = await adapter.listObjects({
       bucket: bucket.name,
+      region: bucket.region ?? undefined,
       prefix: providerPrefix,
       delimiter: '/',
       cursor,
@@ -102,13 +108,26 @@ export async function DELETE(request: NextRequest) {
       throw new HttpError(400, 'BAD_REQUEST', 'Invalid bucket_id');
     }
 
+    const objectKeys = [
+      ...(payload.object_key ? [payload.object_key] : []),
+      ...(payload.object_keys ?? []),
+    ];
+
     const { bucket, account } = await getStorageBucketForUser(
       auth.user.id,
       bucketId,
     );
-    const providerKey = applyBucketKeyPrefix(bucket, payload.object_key);
+    const providerKeys = [...new Set(objectKeys)].map((objectKey) =>
+      applyBucketKeyPrefix(bucket, objectKey),
+    );
     const adapter = adapterFromAccount(account);
-    await adapter.deleteObject({ bucket: bucket.name, key: providerKey });
+    for (const providerKey of providerKeys) {
+      await adapter.deleteObject({
+        bucket: bucket.name,
+        region: bucket.region ?? undefined,
+        key: providerKey,
+      });
+    }
 
     await db
       .update(fileUploads)
@@ -121,11 +140,16 @@ export async function DELETE(request: NextRequest) {
         and(
           eq(fileUploads.userId, auth.user.id),
           eq(fileUploads.bucketId, bucket.id),
-          eq(fileUploads.objectKey, providerKey),
+          inArray(fileUploads.objectKey, providerKeys),
           inArray(fileUploads.status, ['initiated', 'uploading']),
         ),
       );
 
-    return ok({ deleted: true, object_key: payload.object_key });
+    return ok({
+      deleted: true,
+      deleted_count: providerKeys.length,
+      object_key: payload.object_key,
+      object_keys: objectKeys,
+    });
   });
 }

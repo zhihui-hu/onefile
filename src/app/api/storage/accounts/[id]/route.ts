@@ -1,8 +1,12 @@
 import { HttpError, ok, parseJson, withApiHandler } from '@/lib/api/response';
 import { requireUser } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { storageAccounts } from '@/lib/db/schema';
-import { encryptedSecret, publicStorageAccount } from '@/lib/storage-config';
+import { type StorageAccount, storageAccounts } from '@/lib/db/schema';
+import {
+  encryptedSecret,
+  getStorageAccountForUser,
+  publicStorageAccount,
+} from '@/lib/storage-config';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -21,6 +25,45 @@ const updateSchema = z.object({
   status: z.enum(['active', 'inactive']).optional(),
 });
 
+function normalizeNullableString(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function assertRequiredProviderAccountId(
+  provider: StorageAccount['provider'],
+  providerAccountId: string | null,
+) {
+  if (provider === 'r2' && !providerAccountId) {
+    throw new HttpError(
+      400,
+      'VALIDATION_ERROR',
+      '请输入 Cloudflare Account ID。',
+    );
+  }
+
+  if (provider === 'tencent_cos' && !providerAccountId) {
+    throw new HttpError(400, 'VALIDATION_ERROR', '请输入腾讯云 AppID。');
+  }
+}
+
+function throwStorageAccountConflict(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : '';
+
+  if (
+    code.startsWith('SQLITE_CONSTRAINT') &&
+    message.includes('onefile_storage_accounts')
+  ) {
+    throw new HttpError(409, 'CONFLICT', '同一仓商下已存在同名存储账号。');
+  }
+
+  throw error;
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -33,50 +76,59 @@ export async function PATCH(
       throw new HttpError(400, 'BAD_REQUEST', 'Invalid account id');
     }
     const payload = await parseJson(request, updateSchema);
+    const existing = await getStorageAccountForUser(user.id, accountId);
+    const providerAccountId =
+      payload.provider_account_id !== undefined
+        ? normalizeNullableString(payload.provider_account_id)
+        : existing.providerAccountId;
+    const endpoint =
+      payload.endpoint !== undefined
+        ? normalizeNullableString(payload.endpoint)
+        : undefined;
     const secret = payload.secret_access_key
       ? encryptedSecret(payload.secret_access_key)
       : null;
 
-    const [updated] = await db
-      .update(storageAccounts)
-      .set({
-        ...(payload.name !== undefined ? { name: payload.name } : {}),
-        ...(payload.provider_account_id !== undefined
-          ? { providerAccountId: payload.provider_account_id }
-          : {}),
-        ...(payload.region !== undefined ? { region: payload.region } : {}),
-        ...(payload.endpoint !== undefined
-          ? { endpoint: payload.endpoint }
-          : {}),
-        ...(payload.namespace !== undefined
-          ? { namespace: payload.namespace }
-          : {}),
-        ...(payload.compartment_id !== undefined
-          ? { compartmentId: payload.compartment_id }
-          : {}),
-        ...(payload.access_key_id !== undefined
-          ? { accessKeyId: payload.access_key_id }
-          : {}),
-        ...(payload.extra_config !== undefined
-          ? { extraConfig: JSON.stringify(payload.extra_config) }
-          : {}),
-        ...(payload.status !== undefined ? { status: payload.status } : {}),
-        ...(secret
-          ? {
-              secretKeyCiphertext: secret.secretKeyCiphertext,
-              credentialHint: secret.credentialHint,
-              credentialsUpdatedAt: secret.credentialsUpdatedAt,
-            }
-          : {}),
-        updatedAt: new Date().toISOString(),
-      })
-      .where(
-        and(
-          eq(storageAccounts.id, accountId),
-          eq(storageAccounts.userId, user.id),
-        ),
-      )
-      .returning();
+    assertRequiredProviderAccountId(existing.provider, providerAccountId);
+
+    let updated: StorageAccount | undefined;
+    try {
+      [updated] = await db
+        .update(storageAccounts)
+        .set({
+          ...(payload.name !== undefined ? { name: payload.name } : {}),
+          ...(payload.provider_account_id !== undefined
+            ? { providerAccountId }
+            : {}),
+          ...(payload.region !== undefined ? { region: payload.region } : {}),
+          ...(payload.endpoint !== undefined ? { endpoint } : {}),
+          ...(payload.namespace !== undefined
+            ? { namespace: payload.namespace }
+            : {}),
+          ...(payload.compartment_id !== undefined
+            ? { compartmentId: payload.compartment_id }
+            : {}),
+          ...(payload.access_key_id !== undefined
+            ? { accessKeyId: payload.access_key_id }
+            : {}),
+          ...(payload.extra_config !== undefined
+            ? { extraConfig: JSON.stringify(payload.extra_config) }
+            : {}),
+          ...(payload.status !== undefined ? { status: payload.status } : {}),
+          ...(secret
+            ? {
+                secretKeyCiphertext: secret.secretKeyCiphertext,
+                credentialHint: secret.credentialHint,
+                credentialsUpdatedAt: secret.credentialsUpdatedAt,
+              }
+            : {}),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(storageAccounts.id, existing.id))
+        .returning();
+    } catch (error) {
+      throwStorageAccountConflict(error);
+    }
 
     if (!updated) {
       throw new HttpError(404, 'NOT_FOUND', 'Storage account not found');

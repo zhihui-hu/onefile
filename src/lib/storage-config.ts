@@ -69,7 +69,6 @@ export function publicStorageBucket(
     public_base_url: bucket.publicBaseUrl,
     visibility: bucket.visibility,
     is_default: bucket.isDefault,
-    cors_status: bucket.corsStatus,
     last_checked_at: bucket.lastCheckedAt,
     last_error: bucket.lastError,
     created_at: bucket.createdAt,
@@ -125,17 +124,25 @@ export async function getStorageBucketForUser(
 export function adapterConfigFromAccount(
   account: StorageAccount,
 ): StorageAdapterConfig {
+  const extraConfig = parseExtraConfig(account.extraConfig);
+
+  if (account.providerAccountId) {
+    extraConfig.accountId = account.providerAccountId;
+  }
+  if (account.namespace) {
+    extraConfig.namespace = account.namespace;
+  }
+  if (account.compartmentId) {
+    extraConfig.compartmentId = account.compartmentId;
+  }
+
   return {
     provider: account.provider,
     accessKeyId: account.accessKeyId,
     secretAccessKey: decryptText(account.secretKeyCiphertext),
     region: account.region,
     endpoint: account.endpoint,
-    extraConfig: {
-      ...parseExtraConfig(account.extraConfig),
-      namespace: account.namespace,
-      compartmentId: account.compartmentId,
-    },
+    extraConfig,
   };
 }
 

@@ -19,6 +19,20 @@ export type ApiTokenScope =
   | 'files:delete'
   | 'uploads:write';
 
+export const API_TOKEN_SCOPES = [
+  'files:read',
+  'files:write',
+  'files:delete',
+  'uploads:write',
+] as const satisfies readonly ApiTokenScope[];
+
+const IMPLIED_SCOPES: Record<ApiTokenScope, ApiTokenScope[]> = {
+  'files:read': [],
+  'files:write': ['uploads:write'],
+  'files:delete': [],
+  'uploads:write': [],
+};
+
 export interface AuthContext {
   user: User;
   source: 'session' | 'api_token';
@@ -30,9 +44,7 @@ export function parseScopes(value: string) {
     const parsed = JSON.parse(value) as unknown;
     if (Array.isArray(parsed)) {
       return parsed.filter((scope): scope is ApiTokenScope =>
-        ['files:read', 'files:write', 'files:delete', 'uploads:write'].includes(
-          String(scope),
-        ),
+        API_TOKEN_SCOPES.includes(String(scope) as ApiTokenScope),
       );
     }
   } catch {
@@ -43,6 +55,16 @@ export function parseScopes(value: string) {
 
 export function serializeScopes(scopes: ApiTokenScope[]) {
   return JSON.stringify(Array.from(new Set(scopes)));
+}
+
+function expandScopes(scopes: ApiTokenScope[]) {
+  const expanded = new Set(scopes);
+  for (const scope of scopes) {
+    for (const impliedScope of IMPLIED_SCOPES[scope]) {
+      expanded.add(impliedScope);
+    }
+  }
+  return expanded;
 }
 
 export function createRawApiToken() {
@@ -93,10 +115,8 @@ export async function getAuthContext(
     throw new HttpError(401, 'UNAUTHORIZED', 'Invalid API token');
   }
 
-  const scopes = parseScopes(apiToken.scopes);
-  const missingScopes = requiredScopes.filter(
-    (scope) => !scopes.includes(scope),
-  );
+  const scopes = expandScopes(parseScopes(apiToken.scopes));
+  const missingScopes = requiredScopes.filter((scope) => !scopes.has(scope));
   if (missingScopes.length > 0) {
     throw new HttpError(
       403,

@@ -14,24 +14,38 @@ import type {
 
 type JsonObject = Record<string, unknown>;
 type MaybeItems<T> = T[] | { items?: T[] };
+type MaybeStorageAccount = StorageAccount | { account?: StorageAccount };
+type MaybeStorageBucket = StorageBucket | { bucket?: StorageBucket };
+type CreatedFileApiToken = FileApiToken & {
+  token?: string;
+  plain_token?: string;
+  raw_token?: string;
+};
+type MaybeCreatedFileApiToken =
+  | CreatedFileApiToken
+  | { token?: FileApiToken; raw_token?: string; plain_token?: string };
+type MaybeFileApiToken = FileApiToken | { token?: FileApiToken };
 type MaybeUser = CurrentUser | { user?: CurrentUser | null } | null;
 
 export class OneFileApiError extends Error {
-  code: string;
+  code: number | string;
   details?: unknown;
   status: number;
+  type?: string;
 
   constructor(
     message: string,
     status: number,
-    code = 'REQUEST_FAILED',
+    code: number | string = 'REQUEST_FAILED',
     details?: unknown,
+    type?: string,
   ) {
     super(message);
     this.name = 'OneFileApiError';
     this.code = code;
     this.details = details;
     this.status = status;
+    this.type = type;
   }
 }
 
@@ -43,6 +57,47 @@ function asItems<T>(value: MaybeItems<T> | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   if (value?.items && Array.isArray(value.items)) return value.items;
   return [];
+}
+
+function asStorageAccount(value: MaybeStorageAccount) {
+  if (isRecord(value) && 'account' in value && isRecord(value.account)) {
+    return value.account as StorageAccount;
+  }
+  return value as StorageAccount;
+}
+
+function asStorageBucket(value: MaybeStorageBucket) {
+  if (isRecord(value) && 'bucket' in value && isRecord(value.bucket)) {
+    return value.bucket as StorageBucket;
+  }
+  return value as StorageBucket;
+}
+
+function asFileApiToken(value: MaybeFileApiToken) {
+  if (isRecord(value) && 'token' in value && isRecord(value.token)) {
+    return value.token as FileApiToken;
+  }
+  return value as FileApiToken;
+}
+
+function asCreatedFileApiToken(value: MaybeCreatedFileApiToken) {
+  if (isRecord(value) && 'token' in value && isRecord(value.token)) {
+    const rawToken =
+      typeof value.raw_token === 'string'
+        ? value.raw_token
+        : typeof value.plain_token === 'string'
+          ? value.plain_token
+          : undefined;
+
+    return {
+      ...(value.token as FileApiToken),
+      token: rawToken,
+      raw_token: rawToken,
+      plain_token: rawToken,
+    } satisfies CreatedFileApiToken;
+  }
+
+  return value as CreatedFileApiToken;
 }
 
 function queryString(
@@ -73,6 +128,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
         response.status,
         failure.error?.code,
         failure.error?.details,
+        failure.error?.type,
       );
     }
 
@@ -90,6 +146,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
         response.status,
         envelope.error.code,
         envelope.error.details,
+        envelope.error.type,
       );
     }
     return envelope.data;
@@ -164,18 +221,24 @@ export async function listStorageAccounts() {
 }
 
 export async function createStorageAccount(payload: JsonObject) {
-  return jsonRequest<StorageAccount>('/api/storage/accounts', 'POST', payload);
+  const data = await jsonRequest<MaybeStorageAccount>(
+    '/api/storage/accounts',
+    'POST',
+    payload,
+  );
+  return asStorageAccount(data);
 }
 
 export async function updateStorageAccount(
   id: number | string,
   payload: JsonObject,
 ) {
-  return jsonRequest<StorageAccount>(
+  const data = await jsonRequest<MaybeStorageAccount>(
     `/api/storage/accounts/${id}`,
     'PATCH',
     payload,
   );
+  return asStorageAccount(data);
 }
 
 export async function deleteStorageAccount(id: number | string) {
@@ -195,18 +258,20 @@ export async function listBuckets() {
 }
 
 export async function updateBucket(id: number | string, payload: JsonObject) {
-  return jsonRequest<StorageBucket>(
+  const data = await jsonRequest<MaybeStorageBucket>(
     `/api/storage/buckets/${id}`,
     'PATCH',
     payload,
   );
+  return asStorageBucket(data);
 }
 
 export async function setDefaultBucket(id: number | string) {
-  return jsonRequest<StorageBucket>(
+  const data = await jsonRequest<MaybeStorageBucket>(
     `/api/storage/buckets/${id}/default`,
     'POST',
   );
+  return asStorageBucket(data);
 }
 
 export async function listFiles(params: {
@@ -237,6 +302,13 @@ export async function listFiles(params: {
 export async function deleteFile(payload: {
   bucket_id: number | string;
   object_key: string;
+}) {
+  return jsonRequest<unknown>('/api/files', 'DELETE', payload);
+}
+
+export async function deleteFiles(payload: {
+  bucket_id: number | string;
+  object_keys: string[];
 }) {
   return jsonRequest<unknown>('/api/files', 'DELETE', payload);
 }
@@ -281,22 +353,24 @@ export async function listFileApiTokens() {
 }
 
 export async function createFileApiToken(payload: JsonObject) {
-  return jsonRequest<FileApiToken & { token?: string; plain_token?: string }>(
+  const data = await jsonRequest<MaybeCreatedFileApiToken>(
     '/api/file-api-tokens',
     'POST',
     payload,
   );
+  return asCreatedFileApiToken(data);
 }
 
 export async function updateFileApiToken(
   id: number | string,
   payload: JsonObject,
 ) {
-  return jsonRequest<FileApiToken>(
+  const data = await jsonRequest<MaybeFileApiToken>(
     `/api/file-api-tokens/${id}`,
     'PATCH',
     payload,
   );
+  return asFileApiToken(data);
 }
 
 export async function deleteFileApiToken(id: number | string) {

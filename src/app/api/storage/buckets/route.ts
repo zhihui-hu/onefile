@@ -1,15 +1,16 @@
 import { ok, withApiHandler } from '@/lib/api/response';
-import { requireUser } from '@/lib/auth/session';
+import { getAuthContext } from '@/lib/auth/api-tokens';
 import { db } from '@/lib/db/client';
 import { storageAccounts, storageBuckets } from '@/lib/db/schema';
 import { publicStorageBucket } from '@/lib/storage-config';
 import { asc, eq } from 'drizzle-orm';
+import { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   return withApiHandler(async () => {
-    const user = await requireUser();
+    const auth = await getAuthContext(request, ['files:read']);
     const rows = await db
       .select({ bucket: storageBuckets, account: storageAccounts })
       .from(storageBuckets)
@@ -17,7 +18,7 @@ export async function GET() {
         storageAccounts,
         eq(storageBuckets.storageAccountId, storageAccounts.id),
       )
-      .where(eq(storageBuckets.userId, user.id))
+      .where(eq(storageBuckets.userId, auth.user.id))
       .orderBy(asc(storageAccounts.name), asc(storageBuckets.name));
 
     return ok({
