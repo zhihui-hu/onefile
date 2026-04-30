@@ -221,6 +221,23 @@ export interface HeadObjectResult {
   metadata?: Record<string, string>;
 }
 
+export interface UploadPartInput {
+  bucket: string;
+  region?: string;
+  key: string;
+  uploadId: string;
+  partNumber: number;
+  body: Buffer | Uint8Array;
+  contentLength?: number;
+}
+
+export interface UploadPartResult {
+  bucket: string;
+  key: string;
+  partNumber: number;
+  etag: string;
+}
+
 export interface StorageAdapter {
   provider: StorageProviderId;
   checkCredentials(
@@ -241,6 +258,7 @@ export interface StorageAdapter {
   presignMultipartPart(
     input: PresignMultipartPartInput,
   ): Promise<PresignedUploadUrl>;
+  uploadPart(input: UploadPartInput): Promise<UploadPartResult>;
   completeMultipartUpload(
     input: CompleteMultipartUploadInput,
   ): Promise<CompleteMultipartUploadResult>;

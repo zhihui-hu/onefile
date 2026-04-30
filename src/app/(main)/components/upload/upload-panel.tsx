@@ -4,9 +4,8 @@ import {
   abortUpload,
   completeUpload,
   createUpload,
-  createUploadPart,
   directUpload,
-  getSignedUrl,
+  proxyUploadPart,
 } from '@/app/(main)/components/api';
 import { joinObjectKey } from '@/app/(main)/components/path';
 import type {
@@ -180,23 +179,17 @@ export function UploadPanel({
           const start = (partNumber - 1) * partSize;
           const end = Math.min(start + partSize, task.file.size);
           const blob = task.file.slice(start, end);
-          const signed = await createUploadPart(id, {
-            part_number: partNumber,
-            content_length: blob.size,
-          });
-          const url = getSignedUrl(signed);
-          if (!url) throw new Error(`第 ${partNumber} 片缺少上传 URL。`);
-
-          const etag = await putSignedUrl(
-            url,
+          const result = await proxyUploadPart(
+            id,
+            partNumber,
             blob,
-            signed.headers,
             signal,
             (loaded) => {
               activeProgress.set(partNumber, loaded);
               reportProgress();
             },
           );
+          const etag = result.etag;
           activeProgress.delete(partNumber);
           completedBytes += blob.size;
           completedParts.push({ part_number: partNumber, etag });

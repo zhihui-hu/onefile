@@ -17,6 +17,8 @@ import type {
   PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
+  UploadPartInput,
+  UploadPartResult,
 } from './types';
 import {
   basenameFromObjectPath,
@@ -377,6 +379,10 @@ export class OracleOciStorageAdapter implements StorageAdapter {
 
   async presignMultipartPart(): Promise<PresignedUploadUrl> {
     throw new Error('Oracle OCI does not support browser presigned uploads');
+  }
+
+  async uploadPart(): Promise<UploadPartResult> {
+    throw new Error('Oracle OCI multipart uploads are not supported');
   }
 
   async completeMultipartUpload(): Promise<CompleteMultipartUploadResult> {

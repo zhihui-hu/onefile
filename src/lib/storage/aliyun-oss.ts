@@ -22,6 +22,8 @@ import type {
   PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
+  UploadPartInput,
+  UploadPartResult,
 } from './types';
 import {
   basenameFromObjectPath,
@@ -207,6 +209,27 @@ export class AliyunOssStorageAdapter implements StorageAdapter {
       false,
     );
     return createPresignedUploadUrl('PUT', url, expiresInSeconds);
+  }
+
+  async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {
+    this.client.useBucket(input.bucket);
+    const output = await this.client.uploadPart(
+      normalizeObjectKey(input.key),
+      input.uploadId,
+      input.partNumber,
+      // aliyun-oss expects a Buffer, File, or Blob
+      Buffer.from(input.body),
+      // we only upload a single chunk here, so start is 0 and end is size - 1
+      0,
+      input.body.byteLength - 1,
+    );
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      partNumber: input.partNumber,
+      etag: stringFromUnknown(output.res?.headers?.etag) ?? '',
+    };
   }
 
   async completeMultipartUpload(

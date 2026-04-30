@@ -22,6 +22,8 @@ import type {
   PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
+  UploadPartInput,
+  UploadPartResult,
 } from './types';
 import {
   basenameFromObjectPath,
@@ -188,6 +190,25 @@ export class TencentCosStorageAdapter implements StorageAdapter {
       },
     });
     return createPresignedUploadUrl('PUT', url, expiresInSeconds);
+  }
+
+  async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {
+    const output = await this.client.multipartUpload({
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
+      Key: normalizeObjectKey(input.key),
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+      Body: Buffer.from(input.body),
+      ContentLength: input.contentLength ?? input.body.byteLength,
+    });
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      partNumber: input.partNumber,
+      etag: output.ETag ?? '',
+    };
   }
 
   async completeMultipartUpload(

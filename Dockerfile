@@ -50,9 +50,9 @@ RUN apk add --no-cache ca-certificates libc6-compat libstdc++ \
   && chown nextjs:nodejs /app /app/data
 
 COPY --from=node-runtime --link /usr/local/bin/node /usr/local/bin/node
-COPY --from=builder --chown=nextjs:nodejs --link /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs --link /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs --link /app/public ./public
+COPY --from=builder --chown=1001:1001 --link /app/.next/standalone ./
+COPY --from=builder --chown=1001:1001 --link /app/.next/static ./.next/static
+COPY --from=builder --chown=1001:1001 --link /app/public ./public
 
 USER nextjs
 

@@ -119,6 +119,15 @@ declare module 'ali-oss' {
       name: string,
       options?: Record<string, unknown>,
     ): Promise<OSS.MultipartUploadResult>;
+    uploadPart(
+      name: string,
+      uploadId: string,
+      partNo: number,
+      file: Buffer | Uint8Array | string | NodeJS.ReadableStream,
+      start: number,
+      end: number,
+      options?: Record<string, unknown>,
+    ): Promise<OSS.OperationResult>;
     completeMultipartUpload(
       name: string,
       uploadId: string,

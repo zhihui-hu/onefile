@@ -38,6 +38,8 @@ import type {
   StorageAdapter,
   StorageAdapterConfig,
   StorageObjectItem,
+  UploadPartInput,
+  UploadPartResult,
 } from './types';
 import {
   basenameFromObjectPath,
@@ -189,6 +191,26 @@ export class S3CompatibleStorageAdapter implements StorageAdapter {
       expiresIn: expiresInSeconds,
     });
     return createPresignedUploadUrl('PUT', url, expiresInSeconds, headers);
+  }
+
+  async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {
+    const output = await this.client.send(
+      new UploadPartCommand({
+        Bucket: input.bucket,
+        Key: normalizeObjectKey(input.key),
+        UploadId: input.uploadId,
+        PartNumber: input.partNumber,
+        Body: input.body,
+        ContentLength: input.contentLength ?? input.body.byteLength,
+      }),
+    );
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      partNumber: input.partNumber,
+      etag: output.ETag ?? '',
+    };
   }
 
   async completeMultipartUpload(

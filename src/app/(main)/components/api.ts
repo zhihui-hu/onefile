@@ -436,6 +436,59 @@ export function directUpload(
   });
 }
 
+export function proxyUploadPart(
+  uploadId: string,
+  partNumber: number,
+  chunk: Blob,
+  signal: AbortSignal,
+  onProgress: (loaded: number) => void,
+) {
+  const formData = new FormData();
+  formData.set('part_number', String(partNumber));
+  formData.set('chunk', chunk, 'chunk');
+
+  return new Promise<{ part_number: number; etag: string }>(
+    (resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      const abort = () => {
+        xhr.abort();
+        reject(new DOMException('Upload aborted', 'AbortError'));
+      };
+
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+
+      signal.addEventListener('abort', abort, { once: true });
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      xhr.onerror = () => reject(new Error('分片上传失败'));
+      xhr.onabort = () =>
+        reject(new DOMException('Upload aborted', 'AbortError'));
+      xhr.onload = async () => {
+        signal.removeEventListener('abort', abort);
+        try {
+          resolve(
+            await parseResponse<{ part_number: number; etag: string }>(
+              xhrResponse(xhr),
+            ),
+          );
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      xhr.open('POST', `/api/uploads/${uploadId}/parts/upload`);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.withCredentials = true;
+      xhr.send(formData);
+    },
+  );
+}
+
 export async function createUploadPart(
   uploadId: string,
   payload: { part_number: number; content_length: number },
