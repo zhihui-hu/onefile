@@ -5,8 +5,14 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '..');
 const standaloneDir = path.join(projectRoot, '.next', 'standalone');
-const modelSql = path.join(projectRoot, 'plan', 'model.sql');
-const standaloneModelSql = path.join(standaloneDir, 'plan', 'model.sql');
+const modelSql = path.join(projectRoot, 'src', 'lib', 'db', 'model.sql');
+const standaloneModelSql = path.join(
+  standaloneDir,
+  'src',
+  'lib',
+  'db',
+  'model.sql',
+);
 
 function removePnpmPackages(pattern) {
   const pnpmDir = path.join(standaloneDir, 'node_modules', '.pnpm');

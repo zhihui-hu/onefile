@@ -164,9 +164,6 @@ export const storageBuckets = sqliteTable(
     visibility: text('visibility', { enum: ['private', 'public'] })
       .notNull()
       .default('private'),
-    isDefault: integer('is_default', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     lastCheckedAt: text('last_checked_at'),
     lastError: text('last_error'),
     createdAt: text('created_at')
@@ -186,9 +183,6 @@ export const storageBuckets = sqliteTable(
     index('idx_onefile_storage_buckets_storage_account_id').on(
       table.storageAccountId,
     ),
-    uniqueIndex('idx_onefile_storage_buckets_user_default')
-      .on(table.userId)
-      .where(sql`${table.isDefault} = 1`),
   ],
 );
 

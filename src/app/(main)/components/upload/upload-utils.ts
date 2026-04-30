@@ -150,6 +150,11 @@ export function putSignedUrl(
       reject(new DOMException('Upload aborted', 'AbortError'));
     };
 
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+
     signal.addEventListener('abort', abort, { once: true });
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded);

@@ -4,7 +4,6 @@ import type {
   StorageAccount,
   StorageBucket,
 } from '@/app/(main)/components/types';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -36,14 +35,10 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { Database, Pencil, RefreshCw, Star } from 'lucide-react';
+import { Database, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { bucketPublicBaseUrl } from './bucket-url';
-
-function isDefaultBucket(bucket: StorageBucket) {
-  return bucket.is_default === true || bucket.is_default === 1;
-}
 
 function useIsOverflowing<T extends HTMLElement>(value: string) {
   const ref = useRef<T>(null);
@@ -161,12 +156,6 @@ export function StorageAccountBucketList({
             <div className="flex min-w-0 items-center gap-2">
               <Database className="size-4 shrink-0 text-muted-foreground" />
               <OverflowText>{bucket.name}</OverflowText>
-              {isDefaultBucket(bucket) && (
-                <Badge variant="secondary" className="shrink-0">
-                  <Star data-icon="inline-start" />
-                  默认
-                </Badge>
-              )}
             </div>
           );
         },

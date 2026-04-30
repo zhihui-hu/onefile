@@ -6,7 +6,7 @@ import {
   storageAccounts,
   storageBuckets,
 } from '@/lib/db/schema';
-import { adapterFromAccount } from '@/lib/storage-config';
+import { adapterFromAccountForBucket } from '@/lib/storage-config';
 import { and, eq, inArray, isNotNull, lt, or } from 'drizzle-orm';
 
 const COMPLETED_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -69,7 +69,10 @@ export async function runCleanup() {
     let abortedMultipartUploads = 0;
     for (const row of abortTargets) {
       try {
-        await adapterFromAccount(row.account).abortMultipartUpload({
+        await adapterFromAccountForBucket(
+          row.account,
+          row.bucket,
+        ).abortMultipartUpload({
           bucket: row.bucket.name,
           region: row.bucket.region ?? undefined,
           key: row.upload.objectKey,

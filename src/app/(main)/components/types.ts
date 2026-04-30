@@ -50,7 +50,6 @@ export type StorageBucket = {
   key_prefix?: string | null;
   public_base_url?: string | null;
   visibility?: 'private' | 'public' | string;
-  is_default?: boolean | number;
   last_checked_at?: string | null;
   last_error?: string | null;
 };
@@ -119,6 +118,22 @@ export type UploadInitResult = {
   part_size?: number;
   total_parts?: number;
   expires_at?: string;
+};
+
+export type UploadDirectResult = {
+  id?: string;
+  upload_id?: string;
+  bucket_id?: number | string;
+  bucket_name?: string;
+  object_key?: string;
+  original_filename?: string;
+  original_mime_type?: string;
+  file_size?: number;
+  original_file_size?: number;
+  mime_type?: string;
+  compressed?: boolean;
+  etag?: string | null;
+  location?: string | null;
 };
 
 export type UploadPartResult = {

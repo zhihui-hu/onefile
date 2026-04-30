@@ -10,12 +10,12 @@ import {
 } from '@/lib/db/schema';
 import { avoidObjectKeyConflict, buildObjectKey } from '@/lib/files/keys';
 import {
-  adapterFromAccount,
+  adapterFromAccountForBucket,
   applyBucketKeyPrefix,
   getStorageBucketForUser,
   stripBucketKeyPrefix,
 } from '@/lib/storage-config';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -112,56 +112,7 @@ async function chooseUploadBucket(
     throw new HttpError(404, 'NOT_FOUND', 'No storage bucket is available');
   }
 
-  const bucketIds = candidates.map((row) => row.bucket.id);
-  const recentUploads = await db
-    .select({ bucketId: fileUploads.bucketId, status: fileUploads.status })
-    .from(fileUploads)
-    .where(
-      and(
-        eq(fileUploads.userId, userId),
-        inArray(fileUploads.bucketId, bucketIds),
-      ),
-    );
-  const activeCountByBucketId = new Map<number, number>();
-  const recentCountByBucketId = new Map<number, number>();
-  for (const upload of recentUploads) {
-    recentCountByBucketId.set(
-      upload.bucketId,
-      (recentCountByBucketId.get(upload.bucketId) ?? 0) + 1,
-    );
-    if (upload.status === 'initiated' || upload.status === 'uploading') {
-      activeCountByBucketId.set(
-        upload.bucketId,
-        (activeCountByBucketId.get(upload.bucketId) ?? 0) + 1,
-      );
-    }
-  }
-
-  const [selected] = candidates
-    .map((row) => ({
-      ...row,
-      activeUploads: activeCountByBucketId.get(row.bucket.id) ?? 0,
-      recentUploads: recentCountByBucketId.get(row.bucket.id) ?? 0,
-    }))
-    .sort((left, right) => {
-      const loadDelta = left.activeUploads - right.activeUploads;
-      if (loadDelta !== 0) return loadDelta;
-
-      const recentDelta = left.recentUploads - right.recentUploads;
-      if (recentDelta !== 0) return recentDelta;
-
-      const defaultDelta =
-        Number(right.bucket.isDefault) - Number(left.bucket.isDefault);
-      if (defaultDelta !== 0) return defaultDelta;
-
-      return left.bucket.id - right.bucket.id;
-    });
-
-  if (!selected) {
-    throw new HttpError(404, 'NOT_FOUND', 'No storage bucket is available');
-  }
-
-  return selected;
+  return candidates[0];
 }
 
 export async function POST(request: NextRequest) {
@@ -172,7 +123,7 @@ export async function POST(request: NextRequest) {
       auth.user.id,
       payload.bucket_id,
     );
-    const adapter = adapterFromAccount(account);
+    const adapter = adapterFromAccountForBucket(account, bucket);
     const relativeKey = buildObjectKey({
       filename: payload.original_filename,
       currentPrefix: payload.current_prefix,

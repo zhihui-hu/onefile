@@ -112,7 +112,6 @@ CREATE TABLE IF NOT EXISTS onefile_storage_buckets (
   key_prefix TEXT NOT NULL DEFAULT '',
   public_base_url TEXT,
   visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
-  is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
   last_checked_at TEXT,
   last_error TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -124,9 +123,6 @@ CREATE TABLE IF NOT EXISTS onefile_storage_buckets (
 
 CREATE INDEX IF NOT EXISTS idx_onefile_storage_buckets_user_id ON onefile_storage_buckets(user_id);
 CREATE INDEX IF NOT EXISTS idx_onefile_storage_buckets_storage_account_id ON onefile_storage_buckets(storage_account_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_onefile_storage_buckets_user_default
-  ON onefile_storage_buckets(user_id)
-  WHERE is_default = 1;
 
 -- Ephemeral upload intent/state for direct uploads.
 -- File listings are read from object storage through provider SDKs, so completed

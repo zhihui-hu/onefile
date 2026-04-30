@@ -35,23 +35,55 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  ChevronRight,
-  Database,
-  Plus,
-  RefreshCw,
-  Search,
-  Star,
-} from 'lucide-react';
+import { ChevronRight, Database, Plus, RefreshCw, Search } from 'lucide-react';
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 function accountId(bucket: StorageBucket) {
   return bucket.storage_account_id ?? bucket.storageAccountId ?? '';
 }
 
-function isDefault(bucket: StorageBucket) {
-  return bucket.is_default === true || bucket.is_default === 1;
+function BucketItem({
+  bucket,
+  selected,
+  onSelect,
+}: {
+  bucket: StorageBucket;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflowed, setOverflowed] = useState(false);
+
+  const checkOverflow = useCallback((node: HTMLSpanElement | null) => {
+    textRef.current = node;
+    if (node) {
+      setOverflowed(node.scrollWidth > node.clientWidth);
+    }
+  }, []);
+
+  return (
+    <Tooltip open={overflowed ? undefined : false}>
+      <TooltipTrigger asChild>
+        <Button
+          variant={selected ? 'secondary' : 'ghost'}
+          className="h-7 w-full max-w-full min-w-0 justify-start overflow-hidden px-1.5 text-xs font-normal text-muted-foreground cursor-pointer"
+          onClick={onSelect}
+        >
+          <Database data-icon="inline-start" />
+          <span
+            ref={checkOverflow}
+            className="block min-w-0 flex-1 truncate text-left"
+          >
+            {bucket.name}
+          </span>
+        </Button>
+      </TooltipTrigger>
+      {overflowed && (
+        <TooltipContent side="right">{bucket.name}</TooltipContent>
+      )}
+    </Tooltip>
+  );
 }
 
 const providerIds = [
@@ -73,22 +105,18 @@ export function BucketSidebar({
   selectedBucket,
   loading,
   refreshing,
-  defaultBucketPendingId,
   onSelectBucket,
   onRefresh,
   onCreateAccount,
-  onSetDefault,
 }: {
   accounts: StorageAccount[];
   buckets: StorageBucket[];
   selectedBucket: StorageBucket | null;
   loading: boolean;
   refreshing: boolean;
-  defaultBucketPendingId?: string | null;
   onSelectBucket: (bucket: StorageBucket) => void;
   onRefresh: () => void;
   onCreateAccount: () => void;
-  onSetDefault: (bucket: StorageBucket) => void;
 }) {
   const [search, setSearch] = useState('');
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Set<string>>(
@@ -199,7 +227,7 @@ export function BucketSidebar({
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col p-2">
+        <div className="flex min-w-0 flex-col overflow-hidden p-2">
           {loading ? (
             Array.from({ length: 5 }).map((_, index) => (
               <div
@@ -221,7 +249,7 @@ export function BucketSidebar({
                   onOpenChange={(nextOpen) =>
                     updateGroupOpen(group.key, nextOpen)
                   }
-                  className="group/collapsible flex flex-col "
+                  className="group/collapsible flex min-w-0 flex-col"
                 >
                   <CollapsibleTrigger asChild>
                     <Button
@@ -254,57 +282,19 @@ export function BucketSidebar({
                       </span>
                     </Button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="flex flex-col gap-0.5">
-                    {group.buckets.map((bucket) => {
-                      const selected =
-                        String(selectedBucket?.id) === String(bucket.id);
-                      const defaultBucket = isDefault(bucket);
-                      const settingDefault =
-                        defaultBucketPendingId === String(bucket.id);
-                      return (
-                        <div
+                  <CollapsibleContent className="flex min-w-0  flex-col gap-0.5">
+                    <TooltipProvider delayDuration={300}>
+                      {group.buckets.map((bucket) => (
+                        <BucketItem
                           key={bucket.id}
-                          className="group/bucket grid min-w-0 grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-0.5 cursor-pointer"
-                        >
-                          <Button
-                            variant={selected ? 'secondary' : 'ghost'}
-                            className="h-7 w-full min-w-0 justify-start overflow-hidden px-1.5 text-xs font-normal text-muted-foreground cursor-pointer"
-                            onClick={() => onSelectBucket(bucket)}
-                          >
-                            <Database data-icon="inline-start" />
-                            <span className="min-w-0 truncate">
-                              {bucket.name}
-                            </span>
-                          </Button>
-                          <Button
-                            size="icon-xs"
-                            variant={defaultBucket ? 'secondary' : 'ghost'}
-                            className={cn(
-                              'transition-opacity',
-                              'pointer-events-none  cursor-pointer opacity-0 group-focus-within/bucket:pointer-events-auto group-focus-within/bucket:opacity-100 group-hover/bucket:pointer-events-auto group-hover/bucket:opacity-100',
-                              (selected || settingDefault) &&
-                                'pointer-events-auto opacity-100',
-                              defaultBucket && 'text-primary',
-                            )}
-                            aria-pressed={defaultBucket}
-                            disabled={settingDefault}
-                            title={
-                              defaultBucket ? '默认 bucket' : '设为默认 bucket'
-                            }
-                            onClick={() => {
-                              if (!defaultBucket) {
-                                onSetDefault(bucket);
-                              }
-                            }}
-                          >
-                            <Star
-                              className={cn(defaultBucket && 'fill-current')}
-                            />
-                            <span className="sr-only">设为默认 bucket</span>
-                          </Button>
-                        </div>
-                      );
-                    })}
+                          bucket={bucket}
+                          selected={
+                            String(selectedBucket?.id) === String(bucket.id)
+                          }
+                          onSelect={() => onSelectBucket(bucket)}
+                        />
+                      ))}
+                    </TooltipProvider>
                   </CollapsibleContent>
                 </Collapsible>
               );

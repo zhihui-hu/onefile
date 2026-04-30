@@ -47,6 +47,28 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+const VIDEO_FILE_EXTENSIONS = [
+  '3g2',
+  '3gp',
+  'asf',
+  'avi',
+  'flv',
+  'm2v',
+  'm2ts',
+  'm4v',
+  'mkv',
+  'mov',
+  'mp4',
+  'mpeg',
+  'mpg',
+  'ogv',
+  'rm',
+  'rmvb',
+  'vob',
+  'webm',
+  'wmv',
+];
+
 export function publicObjectUrl(bucket: StorageBucket | null, item: FileItem) {
   if (!bucket || item.kind !== 'file') return null;
 
@@ -112,6 +134,22 @@ function isRasterImage(item: FileItem) {
   );
 }
 
+function isVideoFile(mime: string, ext: string) {
+  if (mime.startsWith('video/')) return true;
+  if (
+    [
+      'application/mp4',
+      'application/ogg',
+      'application/vnd.apple.mpegurl',
+      'application/x-mpegurl',
+    ].includes(mime.toLowerCase())
+  ) {
+    return true;
+  }
+
+  return VIDEO_FILE_EXTENSIONS.includes(ext);
+}
+
 function fileIcon(item: FileItem) {
   if (item.kind === 'folder') return <Folder />;
 
@@ -122,7 +160,7 @@ function fileIcon(item: FileItem) {
     return <FileImage />;
   }
 
-  if (mime.startsWith('video/')) return <FileVideo />;
+  if (isVideoFile(mime, ext)) return <FileVideo />;
   if (mime.startsWith('audio/')) return <FileAudio />;
   if (mime.includes('json') || ['json', 'jsonl', 'map'].includes(ext)) {
     return <FileJson />;

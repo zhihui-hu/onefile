@@ -4,7 +4,7 @@ import { db } from '@/lib/db/client';
 import { fileUploads } from '@/lib/db/schema';
 import { sanitizePrefix } from '@/lib/files/keys';
 import {
-  adapterFromAccount,
+  adapterFromAccountForBucket,
   applyBucketKeyPrefix,
   getStorageBucketForUser,
   stripBucketKeyPrefix,
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       auth.user.id,
       bucketId,
     );
-    const adapter = adapterFromAccount(account);
+    const adapter = adapterFromAccountForBucket(account, bucket);
     const providerPrefix = applyBucketKeyPrefix(bucket, prefix);
 
     const listed = await adapter.listObjects({
@@ -127,7 +127,7 @@ export async function DELETE(request: NextRequest) {
     const providerKeys = [...new Set(objectKeys)].map((objectKey) =>
       applyBucketKeyPrefix(bucket, objectKey),
     );
-    const adapter = adapterFromAccount(account);
+    const adapter = adapterFromAccountForBucket(account, bucket);
     for (const providerKey of providerKeys) {
       await adapter.deleteObject({
         bucket: bucket.name,

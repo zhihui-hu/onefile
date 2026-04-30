@@ -3,7 +3,7 @@ import { getAuthContext } from '@/lib/auth/api-keys';
 import { db } from '@/lib/db/client';
 import { fileUploadParts, fileUploads } from '@/lib/db/schema';
 import {
-  adapterFromAccount,
+  adapterFromAccountForBucket,
   getStorageBucketForUser,
 } from '@/lib/storage-config';
 import { and, eq } from 'drizzle-orm';
@@ -93,7 +93,7 @@ export async function POST(
       auth.user.id,
       upload.bucketId,
     );
-    const adapter = adapterFromAccount(account);
+    const adapter = adapterFromAccountForBucket(account, bucket);
     const presigned = await adapter.presignMultipartPart({
       bucket: bucket.name,
       region: bucket.region ?? undefined,

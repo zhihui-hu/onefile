@@ -131,6 +131,16 @@
   }
 }
 
+/*
+ * Radix ScrollArea wraps content in a div with `display: table; min-width: 100%`
+ * which expands to fit content, breaking text truncation.
+ * Override it inside the sidebar so bucket names truncate properly.
+ */
+aside [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  min-width: 0 !important;
+}
+
 .underline-hover {
   background: linear-gradient(to right, #e4e4e7, var(--primary)) no-repeat;
   background-size: 0 2px;

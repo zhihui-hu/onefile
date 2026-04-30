@@ -4,15 +4,13 @@ import {
   getCurrentUser,
   listBuckets,
   listStorageAccounts,
-  setDefaultBucket,
 } from '@/app/(main)/components/api';
 import { AuthGate } from '@/app/(main)/components/auth/auth-gate';
 import { FileBrowser } from '@/app/(main)/components/files/file-browser';
 import { BucketSidebar } from '@/app/(main)/components/layout/bucket-sidebar';
-import { normalizePrefix } from '@/app/(main)/components/path';
+import { buildAddress, normalizePrefix } from '@/app/(main)/components/path';
 import { SqlBackupDialog } from '@/app/(main)/components/storage/sql-backup-dialog';
 import { StorageAccountDialog } from '@/app/(main)/components/storage/storage-account-dialog';
-import type { StorageBucket } from '@/app/(main)/components/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,27 +22,27 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Database, FileUp, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 
 const FILE_LOCATION_STORAGE_KEY = 'onefile:file-location:v1';
 
 type StoredFileLocation = {
   selectedBucketId: string | null;
+  selectedAddress: string | null;
   prefixes: Record<string, string>;
 };
 
 function readStoredFileLocation(): StoredFileLocation {
   if (typeof window === 'undefined') {
-    return { selectedBucketId: null, prefixes: {} };
+    return { selectedBucketId: null, selectedAddress: null, prefixes: {} };
   }
 
   try {
     const raw = window.localStorage.getItem(FILE_LOCATION_STORAGE_KEY);
     if (!raw) {
-      return { selectedBucketId: null, prefixes: {} };
+      return { selectedBucketId: null, selectedAddress: null, prefixes: {} };
     }
 
     const parsed = JSON.parse(raw) as Partial<StoredFileLocation>;
@@ -64,10 +62,14 @@ function readStoredFileLocation(): StoredFileLocation {
         typeof parsed.selectedBucketId === 'string'
           ? parsed.selectedBucketId
           : null,
+      selectedAddress:
+        typeof parsed.selectedAddress === 'string'
+          ? parsed.selectedAddress
+          : null,
       prefixes,
     };
   } catch {
-    return { selectedBucketId: null, prefixes: {} };
+    return { selectedBucketId: null, selectedAddress: null, prefixes: {} };
   }
 }
 
@@ -84,36 +86,7 @@ function writeStoredFileLocation(location: StoredFileLocation) {
   }
 }
 
-function bucketDefault(bucket: StorageBucket) {
-  return bucket.is_default === true || bucket.is_default === 1;
-}
-
-function markDefaultBucket(
-  buckets: StorageBucket[] | undefined,
-  bucketId: number | string,
-  updatedBucket?: StorageBucket,
-) {
-  if (!buckets) {
-    return buckets;
-  }
-
-  const targetId = String(bucketId);
-  return buckets.map((bucket) => {
-    const isTarget = String(bucket.id) === targetId;
-    if (isTarget) {
-      return {
-        ...bucket,
-        ...updatedBucket,
-        is_default: true,
-      };
-    }
-
-    return bucketDefault(bucket) ? { ...bucket, is_default: false } : bucket;
-  });
-}
-
 export function OneFileHome() {
-  const queryClient = useQueryClient();
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -141,44 +114,6 @@ export function OneFileHome() {
     queryFn: listBuckets,
     enabled: Boolean(meQuery.data),
     retry: false,
-  });
-
-  const defaultMutation = useMutation({
-    mutationFn: setDefaultBucket,
-    onMutate: async (bucketId) => {
-      await queryClient.cancelQueries({ queryKey: ['onefile', 'buckets'] });
-      const previousBuckets = queryClient.getQueryData<StorageBucket[]>([
-        'onefile',
-        'buckets',
-      ]);
-
-      queryClient.setQueryData<StorageBucket[]>(
-        ['onefile', 'buckets'],
-        (current) => markDefaultBucket(current, bucketId),
-      );
-
-      return { previousBuckets };
-    },
-    onSuccess: (updatedBucket, bucketId) => {
-      queryClient.setQueryData<StorageBucket[]>(
-        ['onefile', 'buckets'],
-        (current) => markDefaultBucket(current, bucketId, updatedBucket),
-      );
-      setSelectedBucketId(String(bucketId));
-      toast.success('默认 bucket 已更新');
-    },
-    onError: (error, _bucketId, context) => {
-      if (context?.previousBuckets) {
-        queryClient.setQueryData(
-          ['onefile', 'buckets'],
-          context.previousBuckets,
-        );
-      }
-      toast.error(error instanceof Error ? error.message : '设置失败');
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['onefile', 'buckets'] });
-    },
   });
 
   const accounts = useMemo(
@@ -219,7 +154,7 @@ export function OneFileHome() {
       return;
     }
 
-    const next = buckets.find(bucketDefault) || buckets[0];
+    const next = buckets[0];
     setSelectedBucketId(String(next.id));
   }, [buckets, locationReady, selectedBucketId]);
 
@@ -230,9 +165,18 @@ export function OneFileHome() {
 
     writeStoredFileLocation({
       selectedBucketId,
+      selectedAddress: selectedBucket
+        ? buildAddress(selectedBucket.name, selectedPrefix)
+        : null,
       prefixes: bucketPrefixes,
     });
-  }, [bucketPrefixes, locationReady, selectedBucketId]);
+  }, [
+    bucketPrefixes,
+    locationReady,
+    selectedBucket,
+    selectedBucketId,
+    selectedPrefix,
+  ]);
 
   const updateSelectedPrefix = (nextPrefix: string) => {
     if (!selectedBucket) return;
@@ -337,15 +281,9 @@ export function OneFileHome() {
           selectedBucket={selectedBucket}
           loading={loadingBuckets}
           refreshing={bucketsQuery.isFetching}
-          defaultBucketPendingId={
-            defaultMutation.isPending && defaultMutation.variables !== undefined
-              ? String(defaultMutation.variables)
-              : null
-          }
           onRefresh={() => void bucketsQuery.refetch()}
           onCreateAccount={() => setCreateAccountOpen(true)}
           onSelectBucket={(bucket) => setSelectedBucketId(String(bucket.id))}
-          onSetDefault={(bucket) => defaultMutation.mutate(bucket.id)}
         />
         <FileBrowser
           bucket={selectedBucket}

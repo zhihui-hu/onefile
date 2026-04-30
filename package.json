@@ -1,6 +1,6 @@
 {
   "name": "onefile-standalone",
-  "version": "26.430.1744",
+  "version": "26.51.0040",
   "private": true,
   "scripts": {
     "dev": "next dev -p 27507",

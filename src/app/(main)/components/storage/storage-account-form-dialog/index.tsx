@@ -134,21 +134,19 @@ export function StorageAccountFormDialog({
 
           <ProviderSpecificFields form={form} provider={provider} />
 
-          <FieldGroup>
-            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          {isOracle ? (
+            <FieldGroup>
               <Field
                 className="min-w-0"
                 data-invalid={Boolean(form.formState.errors.access_key_id)}
               >
                 <FieldLabel htmlFor="account-access-key">
-                  {isOracle ? 'User OCID' : 'Access key'} <RequiredMark />
+                  User OCID <RequiredMark />
                 </FieldLabel>
                 <Input
                   id="account-access-key"
                   aria-invalid={Boolean(form.formState.errors.access_key_id)}
-                  placeholder={
-                    isOracle ? 'ocid1.user.oc1..xxxxxxxx' : undefined
-                  }
+                  placeholder="ocid1.user.oc1..xxxxxxxx"
                   {...form.register('access_key_id')}
                 />
                 <FieldError errors={[form.formState.errors.access_key_id]} />
@@ -159,36 +157,62 @@ export function StorageAccountFormDialog({
                 data-invalid={Boolean(form.formState.errors.secret_key)}
               >
                 <FieldLabel htmlFor="account-secret-key">
-                  {isOracle ? 'Private Key (PEM)' : 'Secret key'}{' '}
-                  {!editing && <RequiredMark />}
+                  Private Key (PEM) {!editing && <RequiredMark />}
                 </FieldLabel>
-                {isOracle ? (
-                  <Textarea
-                    id="account-secret-key"
-                    className="min-h-28"
-                    aria-invalid={Boolean(form.formState.errors.secret_key)}
-                    placeholder="-----BEGIN PRIVATE KEY-----"
-                    {...form.register('secret_key')}
+                <Textarea
+                  id="account-secret-key"
+                  className="h-28"
+                  aria-invalid={Boolean(form.formState.errors.secret_key)}
+                  placeholder="-----BEGIN PRIVATE KEY-----"
+                  {...form.register('secret_key')}
+                />
+                {editing && (
+                  <FieldDescription>留空表示不更新私钥。</FieldDescription>
+                )}
+                <FieldError errors={[form.formState.errors.secret_key]} />
+              </Field>
+            </FieldGroup>
+          ) : (
+            <FieldGroup>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                <Field
+                  className="min-w-0"
+                  data-invalid={Boolean(form.formState.errors.access_key_id)}
+                >
+                  <FieldLabel htmlFor="account-access-key">
+                    Access key <RequiredMark />
+                  </FieldLabel>
+                  <Input
+                    id="account-access-key"
+                    aria-invalid={Boolean(form.formState.errors.access_key_id)}
+                    {...form.register('access_key_id')}
                   />
-                ) : (
+                  <FieldError errors={[form.formState.errors.access_key_id]} />
+                </Field>
+
+                <Field
+                  className="min-w-0"
+                  data-invalid={Boolean(form.formState.errors.secret_key)}
+                >
+                  <FieldLabel htmlFor="account-secret-key">
+                    Secret key {!editing && <RequiredMark />}
+                  </FieldLabel>
                   <Input
                     id="account-secret-key"
                     type="password"
                     aria-invalid={Boolean(form.formState.errors.secret_key)}
                     {...form.register('secret_key')}
                   />
-                )}
-                {editing && (
-                  <FieldDescription>
-                    留空表示不更新{isOracle ? '私钥' : '密钥'}。
-                  </FieldDescription>
-                )}
-                <FieldError errors={[form.formState.errors.secret_key]} />
-              </Field>
-            </div>
-          </FieldGroup>
+                  {editing && (
+                    <FieldDescription>留空表示不更新密钥。</FieldDescription>
+                  )}
+                  <FieldError errors={[form.formState.errors.secret_key]} />
+                </Field>
+              </div>
+            </FieldGroup>
+          )}
 
-          <Separator />
+          {/* <Separator /> */}
 
           <ResponsiveDialog.Footer className="p-3">
             <Button type="submit" size="sm" disabled={pending}>

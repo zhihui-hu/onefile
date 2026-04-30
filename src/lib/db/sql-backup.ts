@@ -149,7 +149,13 @@ function sequenceRows(sqlite: Database.Database, tables: string[]) {
 
 function modelSql() {
   return fs.readFileSync(
-    path.join(/*turbopackIgnore: true*/ process.cwd(), 'plan', 'model.sql'),
+    path.join(
+      /*turbopackIgnore: true*/ process.cwd(),
+      'src',
+      'lib',
+      'db',
+      'model.sql',
+    ),
     'utf8',
   );
 }

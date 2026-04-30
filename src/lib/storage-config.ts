@@ -70,7 +70,6 @@ export function publicStorageBucket(
     key_prefix: bucket.keyPrefix,
     public_base_url: bucket.publicBaseUrl,
     visibility: bucket.visibility,
-    is_default: bucket.isDefault,
     last_checked_at: bucket.lastCheckedAt,
     last_error: bucket.lastError,
     created_at: bucket.createdAt,
@@ -150,6 +149,25 @@ export function adapterConfigFromAccount(
 
 export function adapterFromAccount(account: StorageAccount) {
   return createStorageAdapter(adapterConfigFromAccount(account));
+}
+
+export function adapterFromAccountForBucket(
+  account: StorageAccount,
+  bucket: StorageBucket,
+) {
+  if (account.provider !== 'aliyun_oss') {
+    return adapterFromAccount(account);
+  }
+
+  const config = adapterConfigFromAccount(account);
+  const region = bucket.region?.trim();
+  const endpoint = bucket.endpoint?.trim();
+
+  return createStorageAdapter({
+    ...config,
+    region: region || config.region,
+    endpoint: endpoint || (region ? null : config.endpoint),
+  });
 }
 
 export function applyBucketKeyPrefix(bucket: StorageBucket, objectKey: string) {

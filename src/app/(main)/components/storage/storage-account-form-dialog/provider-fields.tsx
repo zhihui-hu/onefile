@@ -98,24 +98,41 @@ export function ProviderSpecificFields({
   if (provider === 'oracle') {
     return (
       <FieldGroup>
-        <Field
-          className="min-w-0"
-          data-invalid={Boolean(form.formState.errors.provider_account_id)}
-        >
-          <FieldLabel htmlFor="account-provider-id">
-            Tenancy OCID <RequiredMark />
-          </FieldLabel>
-          <Input
-            id="account-provider-id"
-            aria-invalid={Boolean(form.formState.errors.provider_account_id)}
-            placeholder="ocid1.tenancy.oc1..xxxxxxxx"
-            {...form.register('provider_account_id')}
-          />
-          <FieldDescription>
-            用于 OCI API 签名，也会作为默认 compartment 查询 bucket。
-          </FieldDescription>
-          <FieldError errors={[form.formState.errors.provider_account_id]} />
-        </Field>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Field
+            className="min-w-0"
+            data-invalid={Boolean(form.formState.errors.provider_account_id)}
+          >
+            <FieldLabel htmlFor="account-provider-id">
+              Tenancy OCID <RequiredMark />
+            </FieldLabel>
+            <Input
+              id="account-provider-id"
+              aria-invalid={Boolean(form.formState.errors.provider_account_id)}
+              placeholder="ocid1.tenancy.oc1..xxxxxxxx"
+              {...form.register('provider_account_id')}
+            />
+            <FieldDescription>
+              用于 OCI API 签名，也会作为默认 compartment 查询 bucket。
+            </FieldDescription>
+            <FieldError errors={[form.formState.errors.provider_account_id]} />
+          </Field>
+          <Field
+            className="min-w-0"
+            data-invalid={Boolean(form.formState.errors.fingerprint)}
+          >
+            <FieldLabel htmlFor="account-fingerprint">
+              Key Fingerprint <RequiredMark />
+            </FieldLabel>
+            <Input
+              id="account-fingerprint"
+              aria-invalid={Boolean(form.formState.errors.fingerprint)}
+              placeholder="20:3b:97:..."
+              {...form.register('fingerprint')}
+            />
+            <FieldError errors={[form.formState.errors.fingerprint]} />
+          </Field>
+        </div>
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Field
             className="min-w-0"
@@ -153,18 +170,22 @@ export function ProviderSpecificFields({
         </div>
         <Field
           className="min-w-0"
-          data-invalid={Boolean(form.formState.errors.fingerprint)}
+          data-invalid={Boolean(form.formState.errors.compartment_id)}
         >
-          <FieldLabel htmlFor="account-fingerprint">
-            Key Fingerprint <RequiredMark />
+          <FieldLabel htmlFor="account-compartment-id">
+            Compartment OCID（可选）
           </FieldLabel>
           <Input
-            id="account-fingerprint"
-            aria-invalid={Boolean(form.formState.errors.fingerprint)}
-            placeholder="20:3b:97:..."
-            {...form.register('fingerprint')}
+            id="account-compartment-id"
+            aria-invalid={Boolean(form.formState.errors.compartment_id)}
+            placeholder="ocid1.compartment.oc1..xxxxxxxx"
+            {...form.register('compartment_id')}
           />
-          <FieldError errors={[form.formState.errors.fingerprint]} />
+          <FieldDescription>
+            留空默认使用 Tenancy OCID。若 Bucket
+            在子区间（Compartment）下，请填写对应的 Compartment OCID。
+          </FieldDescription>
+          <FieldError errors={[form.formState.errors.compartment_id]} />
         </Field>
       </FieldGroup>
     );

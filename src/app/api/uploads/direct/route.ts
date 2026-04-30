@@ -1,5 +1,5 @@
 import { HttpError, ok, withApiHandler } from '@/lib/api/response';
-import { getApiKeyAuthContext } from '@/lib/auth/api-keys';
+import { getAuthContext } from '@/lib/auth/api-keys';
 import { randomToken } from '@/lib/crypto';
 import { db } from '@/lib/db/client';
 import { fileUploads, storageAccounts, storageBuckets } from '@/lib/db/schema';
@@ -11,12 +11,12 @@ import {
   webpFilename,
 } from '@/lib/image-compression';
 import {
-  adapterFromAccount,
+  adapterFromAccountForBucket,
   applyBucketKeyPrefix,
   getStorageBucketForUser,
   stripBucketKeyPrefix,
 } from '@/lib/storage-config';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -75,56 +75,7 @@ async function chooseUploadBucket(
     throw new HttpError(404, 'NOT_FOUND', 'No storage bucket is available');
   }
 
-  const bucketIds = candidates.map((row) => row.bucket.id);
-  const recentUploads = await db
-    .select({ bucketId: fileUploads.bucketId, status: fileUploads.status })
-    .from(fileUploads)
-    .where(
-      and(
-        eq(fileUploads.userId, userId),
-        inArray(fileUploads.bucketId, bucketIds),
-      ),
-    );
-  const activeCountByBucketId = new Map<number, number>();
-  const recentCountByBucketId = new Map<number, number>();
-  for (const upload of recentUploads) {
-    recentCountByBucketId.set(
-      upload.bucketId,
-      (recentCountByBucketId.get(upload.bucketId) ?? 0) + 1,
-    );
-    if (upload.status === 'initiated' || upload.status === 'uploading') {
-      activeCountByBucketId.set(
-        upload.bucketId,
-        (activeCountByBucketId.get(upload.bucketId) ?? 0) + 1,
-      );
-    }
-  }
-
-  const [selected] = candidates
-    .map((row) => ({
-      ...row,
-      activeUploads: activeCountByBucketId.get(row.bucket.id) ?? 0,
-      recentUploads: recentCountByBucketId.get(row.bucket.id) ?? 0,
-    }))
-    .sort((left, right) => {
-      const loadDelta = left.activeUploads - right.activeUploads;
-      if (loadDelta !== 0) return loadDelta;
-
-      const recentDelta = left.recentUploads - right.recentUploads;
-      if (recentDelta !== 0) return recentDelta;
-
-      const defaultDelta =
-        Number(right.bucket.isDefault) - Number(left.bucket.isDefault);
-      if (defaultDelta !== 0) return defaultDelta;
-
-      return left.bucket.id - right.bucket.id;
-    });
-
-  if (!selected) {
-    throw new HttpError(404, 'NOT_FOUND', 'No storage bucket is available');
-  }
-
-  return selected;
+  return candidates[0];
 }
 
 async function parseUploadFile(request: NextRequest) {
@@ -157,7 +108,7 @@ async function parseUploadFile(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   return withApiHandler(async () => {
-    const auth = await getApiKeyAuthContext(request, ['uploads:write']);
+    const auth = await getAuthContext(request, ['uploads:write']);
     const { formData, file } = await parseUploadFile(request);
     const originalFilename =
       formText(formData, 'original_filename') ?? file.name;
@@ -196,7 +147,7 @@ export async function POST(request: NextRequest) {
       auth.user.id,
       formText(formData, 'bucket_id'),
     );
-    const adapter = adapterFromAccount(account);
+    const adapter = adapterFromAccountForBucket(account, bucket);
     const conflictedRelativeKey = await avoidObjectKeyConflict(
       relativeKey,
       async (key) => {

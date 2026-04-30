@@ -12,7 +12,7 @@ import {
   defaultStorageEndpoint,
   optionalStorageString,
 } from '@/lib/storage/endpoints';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -89,24 +89,6 @@ export async function POST(
         })
         .returning();
       buckets.push(publicStorageBucket(synced, account));
-    }
-
-    const existingDefault = await db
-      .select()
-      .from(storageBuckets)
-      .where(
-        and(
-          eq(storageBuckets.userId, user.id),
-          eq(storageBuckets.isDefault, true),
-        ),
-      )
-      .limit(1);
-
-    if (existingDefault.length === 0 && buckets[0]) {
-      await db
-        .update(storageBuckets)
-        .set({ isDefault: true, updatedAt: now })
-        .where(eq(storageBuckets.id, Number(buckets[0].id)));
     }
 
     return ok({ items: buckets });

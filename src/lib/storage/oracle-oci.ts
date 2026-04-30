@@ -1,14 +1,10 @@
 import { createHash, createSign } from 'node:crypto';
 
 import type {
-  AbortMultipartUploadInput,
   CheckStorageCredentialsInput,
   CheckStorageCredentialsResult,
-  CompleteMultipartUploadInput,
   CompleteMultipartUploadResult,
-  CreateMultipartUploadInput,
   CreateMultipartUploadResult,
-  CreateSingleUploadUrlInput,
   DeleteObjectInput,
   DeleteObjectResult,
   HeadObjectInput,
@@ -16,7 +12,6 @@ import type {
   ListStorageBucketsResult,
   ListStorageObjectsInput,
   ListStorageObjectsResult,
-  PresignMultipartPartInput,
   PresignedUploadUrl,
   PutObjectInput,
   PutObjectResult,

@@ -173,14 +173,40 @@ function migrateStorageBucketCorsStatus(sqlite: Database.Database) {
   sqlite.exec('ALTER TABLE onefile_storage_buckets DROP COLUMN cors_status');
 }
 
+function migrateStorageBucketDefaultFlag(sqlite: Database.Database) {
+  sqlite.exec('DROP INDEX IF EXISTS idx_onefile_storage_buckets_user_default');
+
+  if (!tableHasColumn(sqlite, 'onefile_storage_buckets', 'is_default')) {
+    return;
+  }
+
+  sqlite.exec('ALTER TABLE onefile_storage_buckets DROP COLUMN is_default');
+}
+
+function migrateFileApiKeyImageCompress(sqlite: Database.Database) {
+  if (!tableHasColumn(sqlite, 'onefile_file_api_tokens', 'image_compress')) {
+    return;
+  }
+
+  sqlite.exec('ALTER TABLE onefile_file_api_tokens DROP COLUMN image_compress');
+}
+
 function ensureSchema(sqlite: Database.Database) {
   const modelSql = fs.readFileSync(
-    path.join(/*turbopackIgnore: true*/ process.cwd(), 'plan', 'model.sql'),
+    path.join(
+      /*turbopackIgnore: true*/ process.cwd(),
+      'src',
+      'lib',
+      'db',
+      'model.sql',
+    ),
     'utf8',
   );
   sqlite.exec(modelSql);
   migrateStorageAccountUniqueConstraint(sqlite);
   migrateStorageBucketCorsStatus(sqlite);
+  migrateStorageBucketDefaultFlag(sqlite);
+  migrateFileApiKeyImageCompress(sqlite);
 }
 
 function createSqliteClient() {

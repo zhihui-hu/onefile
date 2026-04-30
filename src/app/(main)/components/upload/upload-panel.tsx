@@ -5,15 +5,22 @@ import {
   completeUpload,
   createUpload,
   createUploadPart,
+  directUpload,
   getSignedUrl,
 } from '@/app/(main)/components/api';
-import { formatBytes } from '@/app/(main)/components/format';
 import { joinObjectKey } from '@/app/(main)/components/path';
 import type {
   StorageBucket,
   UploadCompletePart,
   UploadMode,
 } from '@/app/(main)/components/types';
+import { UploadQueuePopover } from '@/app/(main)/components/upload/upload-queue-popover';
+import {
+  type UploadStatus,
+  type UploadTask,
+  isActiveTask,
+  isFinishedTask,
+} from '@/app/(main)/components/upload/upload-types';
 import {
   MULTIPART_THRESHOLD,
   type UploadableFile,
@@ -23,7 +30,6 @@ import {
   putSignedUrl,
   relativePath,
 } from '@/app/(main)/components/upload/upload-utils';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -32,8 +38,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Tooltip,
   TooltipContent,
@@ -41,42 +45,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  FileArchive,
-  FolderUp,
-  Pause,
-  Play,
-  RotateCcw,
-  Upload,
-  X,
-} from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { FolderUp, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-type UploadStatus =
-  | 'queued'
-  | 'preparing'
-  | 'uploading'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'aborted';
-
-type UploadTask = {
-  id: string;
-  file: UploadableFile;
-  objectKey: string;
-  progress: number;
-  status: UploadStatus;
-  mode?: UploadMode;
-  error?: string;
-  uploadId?: string;
-};
-
-function statusVariant(status: UploadStatus) {
-  if (status === 'failed' || status === 'aborted') return 'destructive';
-  if (status === 'completed') return 'secondary';
-  return 'outline';
+function throwIfUploadAborted(signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new DOMException('Upload aborted', 'AbortError');
+  }
 }
 
 export function UploadPanel({
@@ -97,6 +73,24 @@ export function UploadPanel({
   const pausedRef = useRef(new Set<string>());
   const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+
+  const taskStats = useMemo(() => {
+    const active = tasks.filter(isActiveTask).length;
+    const completed = tasks.filter(
+      (task) => task.status === 'completed',
+    ).length;
+    const failed = tasks.filter((task) => task.status === 'failed').length;
+    const paused = tasks.filter((task) => task.status === 'paused').length;
+    const finished = tasks.filter(isFinishedTask).length;
+    const totalProgress = tasks.length
+      ? Math.round(
+          tasks.reduce((sum, task) => sum + task.progress, 0) / tasks.length,
+        )
+      : 0;
+
+    return { active, completed, failed, finished, paused, totalProgress };
+  }, [tasks]);
 
   const updateTask = useCallback((id: string, patch: Partial<UploadTask>) => {
     setTasks((current) =>
@@ -106,32 +100,29 @@ export function UploadPanel({
 
   const uploadSingle = useCallback(
     async (task: UploadTask, uploadId: string, signal: AbortSignal) => {
-      const init = await createUpload({
-        bucket_id: bucket!.id,
-        object_key: task.objectKey,
-        original_filename: task.file.name,
-        file_size: task.file.size,
-        mime_type: task.file.type || 'application/octet-stream',
-        upload_mode: 'single',
-      });
-      const url = getSignedUrl(init);
-      const id = init.id || init.upload_id || uploadId;
-      if (!url || !id) throw new Error('后端未返回单文件上传 URL。');
-
-      uploadIdsRef.current.set(task.id, id);
-      updateTask(task.id, { uploadId: id, status: 'uploading' });
-      const etag = await putSignedUrl(
-        url,
-        task.file,
-        init.headers,
+      uploadIdsRef.current.set(task.id, uploadId);
+      updateTask(task.id, { uploadId, status: 'uploading' });
+      const uploaded = await directUpload(
+        {
+          bucket_id: bucket!.id,
+          file: task.file,
+          object_key: task.objectKey,
+          original_filename: task.file.name,
+        },
         signal,
-        (loaded) => {
+        (loaded, total) => {
           updateTask(task.id, {
-            progress: Math.round((loaded / Math.max(task.file.size, 1)) * 100),
+            progress: Math.min(
+              99,
+              Math.round((loaded / Math.max(total, task.file.size, 1)) * 100),
+            ),
           });
         },
       );
-      await completeUpload(id, { etag, object_key: task.objectKey });
+      throwIfUploadAborted(signal);
+      const id = uploaded.id || uploaded.upload_id || uploadId;
+      uploadIdsRef.current.set(task.id, id);
+      updateTask(task.id, { uploadId: id });
     },
     [bucket, updateTask],
   );
@@ -214,6 +205,7 @@ export function UploadPanel({
       }
 
       await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      throwIfUploadAborted(signal);
       await completeUpload(id, {
         object_key: task.objectKey,
         parts: completedParts.sort((a, b) => a.part_number - b.part_number),
@@ -281,39 +273,71 @@ export function UploadPanel({
 
       if (!nextTasks.length) return;
       setTasks((current) => [...nextTasks, ...current].slice(0, 30));
+      setQueueOpen(true);
       nextTasks.forEach((task) => void runTask(task));
     },
     [bucket, prefix, runTask],
   );
 
-  const cancelTask = async (task: UploadTask) => {
+  const cancelTask = useCallback(
+    (task: UploadTask) => {
+      pausedRef.current.delete(task.id);
+      controllersRef.current.get(task.id)?.abort();
+      const uploadId = uploadIdsRef.current.get(task.id) || task.uploadId;
+      updateTask(task.id, { status: 'aborted' });
+      if (uploadId) void abortUpload(uploadId).catch(() => undefined);
+    },
+    [updateTask],
+  );
+
+  const removeTask = useCallback((task: UploadTask) => {
     pausedRef.current.delete(task.id);
     controllersRef.current.get(task.id)?.abort();
-    const uploadId = uploadIdsRef.current.get(task.id) || task.uploadId;
-    if (uploadId) await abortUpload(uploadId).catch(() => undefined);
-    updateTask(task.id, { status: 'aborted' });
-  };
+    controllersRef.current.delete(task.id);
 
-  const pauseTask = (task: UploadTask) => {
+    const uploadId = uploadIdsRef.current.get(task.id) || task.uploadId;
+    uploadIdsRef.current.delete(task.id);
+    setTasks((current) => current.filter((item) => item.id !== task.id));
+
+    if (uploadId && task.status !== 'completed') {
+      void abortUpload(uploadId).catch(() => undefined);
+    }
+  }, []);
+
+  const clearFinishedTasks = useCallback(() => {
+    for (const task of tasks) {
+      if (isFinishedTask(task)) {
+        pausedRef.current.delete(task.id);
+        uploadIdsRef.current.delete(task.id);
+      }
+    }
+
+    setTasks((current) => current.filter((task) => !isFinishedTask(task)));
+  }, [tasks]);
+
+  const pauseTask = useCallback((task: UploadTask) => {
     pausedRef.current.add(task.id);
     controllersRef.current.get(task.id)?.abort();
-  };
+  }, []);
 
-  const resumeTask = (task: UploadTask) => {
-    pausedRef.current.delete(task.id);
-    updateTask(task.id, {
-      progress: 0,
-      status: 'queued',
-      error: undefined,
-      uploadId: undefined,
-    });
-    void runTask({
-      ...task,
-      progress: 0,
-      status: 'queued',
-      uploadId: undefined,
-    });
-  };
+  const resumeTask = useCallback(
+    (task: UploadTask) => {
+      pausedRef.current.delete(task.id);
+      updateTask(task.id, {
+        progress: 0,
+        status: 'queued',
+        error: undefined,
+        uploadId: undefined,
+      });
+      void runTask({
+        ...task,
+        progress: 0,
+        status: 'queued',
+        uploadId: undefined,
+      });
+    },
+    [runTask, updateTask],
+  );
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
@@ -355,7 +379,10 @@ export function UploadPanel({
                   <Button
                     size="sm"
                     disabled={!bucket}
-                    className="cursor-pointer"
+                    className={cn(
+                      'cursor-pointer',
+                      dragOver && 'ring-3 ring-ring/50',
+                    )}
                   >
                     <Upload data-icon="inline-start" />
                     上传
@@ -382,6 +409,18 @@ export function UploadPanel({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <UploadQueuePopover
+          clearFinishedTasks={clearFinishedTasks}
+          onCancelTask={(task) => void cancelTask(task)}
+          onOpenChange={setQueueOpen}
+          onPauseTask={pauseTask}
+          onRemoveTask={(task) => void removeTask(task)}
+          onResumeTask={resumeTask}
+          open={queueOpen}
+          stats={taskStats}
+          tasks={tasks}
+        />
       </div>
 
       <input
@@ -409,85 +448,6 @@ export function UploadPanel({
         }}
         {...{ webkitdirectory: '', directory: '' }}
       />
-
-      {tasks.length > 0 && (
-        <ScrollArea className="max-h-56">
-          <div className="flex flex-col gap-2 pr-2">
-            {tasks.map((task) => (
-              <div key={task.id} className="rounded-lg bg-muted/40 p-2">
-                <div className="mb-2 flex items-center gap-2">
-                  <FileArchive />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">
-                      {relativePath(task.file)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatBytes(task.file.size)} · {task.objectKey}
-                    </div>
-                  </div>
-                  <Badge variant={statusVariant(task.status)}>
-                    {task.status}
-                  </Badge>
-                  {(task.status === 'uploading' ||
-                    task.status === 'preparing') && (
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => pauseTask(task)}
-                      className="cursor-pointer"
-                    >
-                      <Pause />
-                      <span className="sr-only">暂停上传</span>
-                    </Button>
-                  )}
-                  {task.status === 'paused' && (
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => resumeTask(task)}
-                      className="cursor-pointer"
-                    >
-                      <Play />
-                      <span className="sr-only">继续上传</span>
-                    </Button>
-                  )}
-                  {(task.status === 'failed' || task.status === 'aborted') && (
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => resumeTask(task)}
-                      className="cursor-pointer"
-                    >
-                      <RotateCcw />
-                      <span className="sr-only">重试上传</span>
-                    </Button>
-                  )}
-                  {task.status !== 'completed' &&
-                    task.status !== 'failed' &&
-                    task.status !== 'aborted' &&
-                    task.status !== 'paused' && (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={() => void cancelTask(task)}
-                        className="cursor-pointer"
-                      >
-                        <X />
-                        <span className="sr-only">取消上传</span>
-                      </Button>
-                    )}
-                </div>
-                <Progress value={task.progress} />
-                {task.error && (
-                  <div className="mt-1 text-xs text-destructive">
-                    {task.error}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      )}
     </div>
   );
 }

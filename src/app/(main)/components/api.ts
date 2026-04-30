@@ -9,6 +9,7 @@ import type {
   StorageAccount,
   StorageBucket,
   UploadCompletePart,
+  UploadDirectResult,
   UploadInitPayload,
   UploadInitResult,
   UploadPartResult,
@@ -334,14 +335,6 @@ export async function updateBucket(id: number | string, payload: JsonObject) {
   return asStorageBucket(data);
 }
 
-export async function setDefaultBucket(id: number | string) {
-  const data = await jsonRequest<MaybeStorageBucket>(
-    `/api/storage/buckets/${id}/default`,
-    'POST',
-  );
-  return asStorageBucket(data);
-}
-
 export async function listFiles(params: {
   bucketId: number | string;
   prefix?: string;
@@ -387,6 +380,60 @@ export async function deleteFiles(payload: {
 
 export async function createUpload(payload: UploadInitPayload) {
   return jsonRequest<UploadInitResult>('/api/uploads', 'POST', payload);
+}
+
+export function directUpload(
+  payload: {
+    bucket_id: number | string;
+    file: File;
+    object_key?: string;
+    original_filename?: string;
+  },
+  signal: AbortSignal,
+  onProgress: (loaded: number, total: number) => void,
+) {
+  const formData = new FormData();
+  formData.set('file', payload.file);
+  formData.set('bucket_id', String(payload.bucket_id));
+  if (payload.object_key) formData.set('object_key', payload.object_key);
+  if (payload.original_filename) {
+    formData.set('original_filename', payload.original_filename);
+  }
+
+  return new Promise<UploadDirectResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    const abort = () => {
+      xhr.abort();
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    };
+
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+
+    signal.addEventListener('abort', abort, { once: true });
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total);
+    };
+    xhr.onerror = () => reject(new Error('服务端上传失败'));
+    xhr.onabort = () =>
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    xhr.onload = async () => {
+      signal.removeEventListener('abort', abort);
+      try {
+        resolve(await parseResponse<UploadDirectResult>(xhrResponse(xhr)));
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    xhr.open('POST', '/api/uploads/direct');
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.withCredentials = true;
+    xhr.send(formData);
+  });
 }
 
 export async function createUploadPart(
@@ -455,4 +502,14 @@ export function getSignedUrl(result: {
   url?: string;
 }) {
   return result.upload_url || result.presigned_url || result.url || '';
+}
+
+function xhrResponse(xhr: XMLHttpRequest) {
+  return new Response(xhr.responseText, {
+    status: xhr.status,
+    statusText: xhr.statusText,
+    headers: {
+      'Content-Type': xhr.getResponseHeader('Content-Type') ?? '',
+    },
+  });
 }
