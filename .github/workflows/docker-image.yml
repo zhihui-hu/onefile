@@ -5,19 +5,11 @@ on:
     tags:
       - 'v*.*.*'
       - '*.*.*'
-  pull_request:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
-
 permissions:
   contents: read
   packages: write
-
 env:
   REGISTRY: ghcr.io
-
 jobs:
   docker:
     name: Build and publish
