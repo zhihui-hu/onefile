@@ -231,7 +231,8 @@ GitHub 官方文档可参考：[Creating an OAuth app](https://docs.github.com/e
 2. **启动服务**
 
    ```bash
-   docker compose up -d --build
+   docker compose pull
+   docker compose up -d
    ```
 
 3. **访问应用**
@@ -253,7 +254,8 @@ GitHub 官方文档可参考：[Creating an OAuth app](https://docs.github.com/e
 
    ```bash
    git pull
-   docker compose up -d --build
+   docker compose pull
+   docker compose up -d
    ```
 
 ### Docker 命令部署

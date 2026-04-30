@@ -1,15 +1,16 @@
 services:
   onefile:
-    build: .
-    image: onefile:latest
+    image: ${ONEFILE_IMAGE:-ghcr.io/zhihui-hu/onefile:latest}
+    pull_policy: ${ONEFILE_PULL_POLICY:-always}
     restart: unless-stopped
     init: true
     environment:
       APP_SECRET: ${APP_SECRET:-}
+      APP_ORIGIN: ${APP_ORIGIN:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}
     ports:
-      - '127.0.0.1:27507:27507'
+      - '${ONEFILE_HOST:-127.0.0.1}:${ONEFILE_PORT:-27507}:27507'
     volumes:
       - onefile-data:/app/data
     security_opt:
