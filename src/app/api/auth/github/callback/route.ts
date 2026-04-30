@@ -4,6 +4,7 @@ import {
   upsertGitHubUserAndToken,
 } from '@/lib/auth/github';
 import { consumeOAuthStateCookie, createSession } from '@/lib/auth/session';
+import { requestOrigin } from '@/lib/request-origin';
 import { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -22,7 +23,10 @@ export async function GET(request: NextRequest) {
     }
 
     await consumeOAuthStateCookie(state);
-    const token = await exchangeGitHubCode(code);
+    const token = await exchangeGitHubCode(
+      code,
+      requestOrigin(request.headers, request.nextUrl.origin),
+    );
     const user = await upsertGitHubUserAndToken(token);
     await createSession(user.id);
     return ok({ authenticated: true });

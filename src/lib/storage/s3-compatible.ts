@@ -32,6 +32,8 @@ import type {
   ListStorageObjectsResult,
   PresignMultipartPartInput,
   PresignedUploadUrl,
+  PutObjectInput,
+  PutObjectResult,
   S3CompatibleProviderId,
   StorageAdapter,
   StorageAdapterConfig,
@@ -222,6 +224,26 @@ export class S3CompatibleStorageAdapter implements StorageAdapter {
         UploadId: input.uploadId,
       }),
     );
+  }
+
+  async putObject(input: PutObjectInput): Promise<PutObjectResult> {
+    const output = await this.client.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: normalizeObjectKey(input.key),
+        Body: input.body,
+        ContentType: input.contentType,
+        ContentLength: input.contentLength ?? input.body.byteLength,
+        Metadata: input.metadata,
+        IfNoneMatch: input.preventOverwrite ? '*' : undefined,
+      }),
+    );
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      etag: output.ETag,
+    };
   }
 
   async deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult> {

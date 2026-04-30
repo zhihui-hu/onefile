@@ -18,6 +18,8 @@ import type {
   ListStorageObjectsResult,
   PresignMultipartPartInput,
   PresignedUploadUrl,
+  PutObjectInput,
+  PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
 } from './types';
@@ -35,6 +37,15 @@ import {
   numberFromUnknown,
 } from './utils';
 
+function sdkDomain(endpoint?: string | null) {
+  const domain = normalizeOptionalString(endpoint);
+  if (!domain || /\{bucket\}/i.test(domain)) {
+    return undefined;
+  }
+
+  return domain;
+}
+
 export class TencentCosStorageAdapter implements StorageAdapter {
   readonly provider = 'tencent_cos' as const;
   private readonly client: COS;
@@ -50,7 +61,7 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     this.client = new COS({
       SecretId: config.accessKeyId,
       SecretKey: config.secretAccessKey,
-      Domain: normalizeOptionalString(config.endpoint),
+      Domain: sdkDomain(config.endpoint),
       ForcePathStyle: config.forcePathStyle ?? undefined,
       ...sdkExtraConfig,
     });
@@ -207,6 +218,32 @@ export class TencentCosStorageAdapter implements StorageAdapter {
       Key: normalizeObjectKey(input.key),
       UploadId: input.uploadId,
     });
+  }
+
+  async putObject(input: PutObjectInput): Promise<PutObjectResult> {
+    const metadataHeaders = Object.fromEntries(
+      Object.entries(input.metadata ?? {}).map(([key, value]) => [
+        `x-cos-meta-${key}`,
+        value,
+      ]),
+    );
+    const output = await this.client.putObject({
+      Bucket: this.bucketName(input.bucket),
+      Region: this.bucketRegion(input.region),
+      Key: normalizeObjectKey(input.key),
+      Body: Buffer.from(input.body),
+      ContentLength: input.contentLength ?? input.body.byteLength,
+      ContentType: input.contentType,
+      Headers: input.preventOverwrite ? { 'If-None-Match': '*' } : undefined,
+      ...metadataHeaders,
+    });
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      etag: output.ETag,
+      location: output.Location,
+    };
   }
 
   async deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult> {

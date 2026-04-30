@@ -288,7 +288,7 @@ export const fileUploadParts = sqliteTable(
   ],
 );
 
-export const fileApiTokens = sqliteTable(
+export const fileApiKeys = sqliteTable(
   'onefile_file_api_tokens',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
@@ -332,11 +332,11 @@ export const schema = {
   storageBuckets,
   fileUploads,
   fileUploadParts,
-  fileApiTokens,
+  fileApiKeys,
 };
 
 export type User = typeof users.$inferSelect;
 export type StorageAccount = typeof storageAccounts.$inferSelect;
 export type StorageBucket = typeof storageBuckets.$inferSelect;
 export type FileUpload = typeof fileUploads.$inferSelect;
-export type FileApiToken = typeof fileApiTokens.$inferSelect;
+export type FileApiKey = typeof fileApiKeys.$inferSelect;

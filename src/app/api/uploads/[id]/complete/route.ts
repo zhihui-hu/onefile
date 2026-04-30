@@ -1,5 +1,5 @@
 import { HttpError, ok, parseJson, withApiHandler } from '@/lib/api/response';
-import { getAuthContext } from '@/lib/auth/api-tokens';
+import { getAuthContext } from '@/lib/auth/api-keys';
 import { db } from '@/lib/db/client';
 import { fileUploadParts, fileUploads } from '@/lib/db/schema';
 import {
@@ -13,14 +13,17 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
+const MAX_PARTS = 10_000;
+
 const completeSchema = z.object({
   parts: z
     .array(
       z.object({
-        part_number: z.number().int().positive(),
+        part_number: z.number().int().positive().max(MAX_PARTS),
         etag: z.string().min(1),
       }),
     )
+    .max(MAX_PARTS)
     .optional(),
   etag: z.string().optional(),
 });

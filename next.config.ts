@@ -2,7 +2,8 @@ import { format } from 'date-fns';
 import { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['better-sqlite3'],
+  output: 'standalone',
+  serverExternalPackages: ['better-sqlite3', 'sharp'],
   images: {
     remotePatterns: [
       {
@@ -18,12 +19,6 @@ const nextConfig: NextConfig = {
     ],
   },
 };
-
-switch (process.env.NODE_ENV) {
-  case 'production':
-    nextConfig.distDir = '.next';
-    break;
-}
 
 process.env.NEXT_PUBLIC_BUILD_TIME = format(new Date(), 'yyyy-MM-dd HH:mm');
 

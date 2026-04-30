@@ -7,7 +7,7 @@ import {
 } from '@/lib/crypto';
 import { db } from '@/lib/db/client';
 import { type User, authRefreshTokens, users } from '@/lib/db/schema';
-import { getEnv } from '@/lib/env';
+import { secureCookiesForRequest } from '@/lib/request-origin';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { cookies, headers } from 'next/headers';
 
@@ -26,10 +26,11 @@ export function toSqlDate(date = new Date()) {
 
 export async function setOAuthStateCookie(state: string) {
   const cookieStore = await cookies();
+  const headerStore = await headers();
   cookieStore.set(OAUTH_STATE_COOKIE, encodeSignedValue(state), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: getEnv().secureCookies,
+    secure: secureCookiesForRequest(headerStore),
     path: '/',
     maxAge: 10 * 60,
   });
@@ -80,7 +81,7 @@ export async function createSession(userId: number) {
   cookieStore.set(SESSION_COOKIE, encodeSignedValue(token), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: getEnv().secureCookies,
+    secure: secureCookiesForRequest(headerStore),
     path: '/',
     maxAge: REFRESH_TOKEN_MAX_AGE_SECONDS,
   });
@@ -152,6 +153,14 @@ export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) {
     throw new HttpError(401, 'UNAUTHORIZED', 'Authentication required');
+  }
+  return user;
+}
+
+export async function requireAdmin() {
+  const user = await requireUser();
+  if (user.role !== 'admin') {
+    throw new HttpError(403, 'FORBIDDEN', 'Administrator privileges required');
   }
   return user;
 }

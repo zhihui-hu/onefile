@@ -186,6 +186,24 @@ export interface DeleteObjectResult {
   key: string;
 }
 
+export interface PutObjectInput {
+  bucket: string;
+  region?: string;
+  key: string;
+  body: Buffer | Uint8Array;
+  contentType?: string;
+  contentLength?: number;
+  metadata?: Record<string, string>;
+  preventOverwrite?: boolean;
+}
+
+export interface PutObjectResult {
+  bucket: string;
+  key: string;
+  etag?: string;
+  location?: string;
+}
+
 export interface HeadObjectInput {
   bucket: string;
   region?: string;
@@ -227,6 +245,7 @@ export interface StorageAdapter {
     input: CompleteMultipartUploadInput,
   ): Promise<CompleteMultipartUploadResult>;
   abortMultipartUpload(input: AbortMultipartUploadInput): Promise<void>;
+  putObject(input: PutObjectInput): Promise<PutObjectResult>;
   deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult>;
   headObject(input: HeadObjectInput): Promise<HeadObjectResult | null>;
 }

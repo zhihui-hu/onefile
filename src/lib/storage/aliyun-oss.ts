@@ -18,6 +18,8 @@ import type {
   ListStorageObjectsResult,
   PresignMultipartPartInput,
   PresignedUploadUrl,
+  PutObjectInput,
+  PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
 } from './types';
@@ -229,6 +231,31 @@ export class AliyunOssStorageAdapter implements StorageAdapter {
       normalizeObjectKey(input.key),
       input.uploadId,
     );
+  }
+
+  async putObject(input: PutObjectInput): Promise<PutObjectResult> {
+    this.client.useBucket(input.bucket);
+    const output = await this.client.put(
+      normalizeObjectKey(input.key),
+      Buffer.from(input.body),
+      {
+        mime: input.contentType,
+        contentLength: input.contentLength ?? input.body.byteLength,
+        meta: input.metadata,
+        headers: {
+          ...(input.preventOverwrite
+            ? { 'x-oss-forbid-overwrite': 'true' }
+            : {}),
+        },
+      },
+    );
+
+    return {
+      bucket: input.bucket,
+      key: input.key,
+      etag: stringFromUnknown(output.res?.headers?.etag),
+      location: output.url,
+    };
   }
 
   async deleteObject(input: DeleteObjectInput): Promise<DeleteObjectResult> {

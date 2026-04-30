@@ -7,6 +7,11 @@ import {
   getStorageAccountForUser,
   publicStorageAccount,
 } from '@/lib/storage-config';
+import {
+  defaultStorageEndpoint,
+  optionalStorageString,
+  storageRegionOrDefault,
+} from '@/lib/storage/endpoints';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -20,15 +25,10 @@ const updateSchema = z.object({
   namespace: z.string().max(160).nullable().optional(),
   compartment_id: z.string().max(240).nullable().optional(),
   access_key_id: z.string().min(1).max(240).optional(),
-  secret_access_key: z.string().min(1).max(2000).optional(),
+  secret_access_key: z.string().min(1).max(10000).optional(),
   extra_config: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(['active', 'inactive']).optional(),
 });
-
-function normalizeNullableString(value: string | null | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
 
 function assertRequiredProviderAccountId(
   provider: StorageAccount['provider'],
@@ -79,12 +79,28 @@ export async function PATCH(
     const existing = await getStorageAccountForUser(user.id, accountId);
     const providerAccountId =
       payload.provider_account_id !== undefined
-        ? normalizeNullableString(payload.provider_account_id)
+        ? optionalStorageString(payload.provider_account_id)
         : existing.providerAccountId;
+    const region =
+      payload.region !== undefined
+        ? storageRegionOrDefault(existing.provider, payload.region)
+        : existing.region;
     const endpoint =
       payload.endpoint !== undefined
-        ? normalizeNullableString(payload.endpoint)
-        : undefined;
+        ? (optionalStorageString(payload.endpoint) ??
+          defaultStorageEndpoint({
+            provider: existing.provider,
+            region,
+            accountId: providerAccountId,
+          }))
+        : payload.region !== undefined ||
+            payload.provider_account_id !== undefined
+          ? (defaultStorageEndpoint({
+              provider: existing.provider,
+              region,
+              accountId: providerAccountId,
+            }) ?? existing.endpoint)
+          : undefined;
     const secret = payload.secret_access_key
       ? encryptedSecret(payload.secret_access_key)
       : null;
@@ -100,8 +116,8 @@ export async function PATCH(
           ...(payload.provider_account_id !== undefined
             ? { providerAccountId }
             : {}),
-          ...(payload.region !== undefined ? { region: payload.region } : {}),
-          ...(payload.endpoint !== undefined ? { endpoint } : {}),
+          ...(payload.region !== undefined ? { region } : {}),
+          ...(endpoint !== undefined ? { endpoint } : {}),
           ...(payload.namespace !== undefined
             ? { namespace: payload.namespace }
             : {}),

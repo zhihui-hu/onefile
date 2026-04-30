@@ -69,6 +69,12 @@ declare module 'ali-oss' {
       etag?: string;
     }
 
+    interface PutObjectResult extends OperationResult {
+      name: string;
+      url?: string;
+      data?: unknown;
+    }
+
     interface SignatureUrlV4Request {
       headers?: Record<string, string>;
       queries?: Record<string, string | number | null>;
@@ -124,6 +130,11 @@ declare module 'ali-oss' {
       uploadId: string,
       options?: Record<string, unknown>,
     ): Promise<OSS.OperationResult>;
+    put(
+      name: string,
+      file: Buffer | Uint8Array | string | NodeJS.ReadableStream,
+      options?: Record<string, unknown>,
+    ): Promise<OSS.PutObjectResult>;
     delete(
       name: string,
       options?: Record<string, unknown>,

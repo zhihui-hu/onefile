@@ -4,6 +4,11 @@ import { db } from '@/lib/db/client';
 import { type StorageAccount, storageAccounts } from '@/lib/db/schema';
 import { createStorageAdapter } from '@/lib/storage';
 import { encryptedSecret, publicStorageAccount } from '@/lib/storage-config';
+import {
+  defaultStorageEndpoint,
+  optionalStorageString,
+  storageRegionOrDefault,
+} from '@/lib/storage/endpoints';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -27,27 +32,9 @@ const createSchema = z.object({
   namespace: z.string().max(160).nullable().optional(),
   compartment_id: z.string().max(240).nullable().optional(),
   access_key_id: z.string().min(1).max(240),
-  secret_access_key: z.string().min(1).max(2000),
+  secret_access_key: z.string().min(1).max(10000),
   extra_config: z.record(z.string(), z.unknown()).optional(),
 });
-
-function normalizeNullableString(value: string | null | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function defaultRegion(provider: z.infer<typeof providerSchema>) {
-  switch (provider) {
-    case 's3':
-      return 'us-east-1';
-    case 'aliyun_oss':
-      return 'cn-hangzhou';
-    case 'tencent_cos':
-      return 'ap-guangzhou';
-    default:
-      return null;
-  }
-}
 
 function assertRequiredProviderAccountId(
   provider: z.infer<typeof providerSchema>,
@@ -100,11 +87,17 @@ export async function POST(request: Request) {
   return withApiHandler(async () => {
     const user = await requireUser();
     const payload = await parseJson(request, createSchema);
-    const region = payload.region?.trim() || defaultRegion(payload.provider);
-    const endpoint = normalizeNullableString(payload.endpoint);
-    const providerAccountId = normalizeNullableString(
+    const providerAccountId = optionalStorageString(
       payload.provider_account_id,
     );
+    const region = storageRegionOrDefault(payload.provider, payload.region);
+    const endpoint =
+      optionalStorageString(payload.endpoint) ??
+      defaultStorageEndpoint({
+        provider: payload.provider,
+        region,
+        accountId: providerAccountId,
+      });
 
     assertRequiredProviderAccountId(payload.provider, providerAccountId);
 

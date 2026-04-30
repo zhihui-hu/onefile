@@ -1,5 +1,5 @@
 import { HttpError, ok, parseJson, withApiHandler } from '@/lib/api/response';
-import { getAuthContext } from '@/lib/auth/api-tokens';
+import { getAuthContext } from '@/lib/auth/api-keys';
 import { db } from '@/lib/db/client';
 import { fileUploads } from '@/lib/db/schema';
 import { sanitizePrefix } from '@/lib/files/keys';
@@ -14,6 +14,8 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
+
+const DEFAULT_FILE_PAGE_SIZE = 50;
 
 const deleteSchema = z
   .object({
@@ -50,7 +52,12 @@ export async function GET(request: NextRequest) {
       ?.trim()
       .toLowerCase();
     const cursor = request.nextUrl.searchParams.get('cursor') ?? undefined;
-    const limit = Number(request.nextUrl.searchParams.get('limit') ?? 200);
+    const parsedLimit = Number(
+      request.nextUrl.searchParams.get('limit') ?? DEFAULT_FILE_PAGE_SIZE,
+    );
+    const limit = Number.isFinite(parsedLimit)
+      ? parsedLimit
+      : DEFAULT_FILE_PAGE_SIZE;
     const { bucket, account } = await getStorageBucketForUser(
       auth.user.id,
       bucketId,
@@ -64,7 +71,7 @@ export async function GET(request: NextRequest) {
       prefix: providerPrefix,
       delimiter: '/',
       cursor,
-      limit: Number.isFinite(limit) ? limit : 200,
+      limit,
     });
 
     const items = listed.items

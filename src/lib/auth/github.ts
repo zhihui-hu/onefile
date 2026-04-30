@@ -4,7 +4,7 @@ import { randomToken } from '@/lib/crypto';
 import { db } from '@/lib/db/client';
 import { oauthTokens, users } from '@/lib/db/schema';
 import { requireGithubEnv } from '@/lib/env';
-import { eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 
 import { setOAuthStateCookie, toSqlDate } from './session';
 
@@ -32,20 +32,20 @@ interface GitHubEmailResponse {
   verified: boolean;
 }
 
-export async function createGitHubAuthorizationUrl() {
+export async function createGitHubAuthorizationUrl(origin: string) {
   const env = requireGithubEnv();
   const state = randomToken(24);
   await setOAuthStateCookie(state);
 
   const url = new URL('https://github.com/login/oauth/authorize');
   url.searchParams.set('client_id', env.clientId);
-  url.searchParams.set('redirect_uri', `${env.appOrigin}/callback/auth`);
+  url.searchParams.set('redirect_uri', `${origin}/callback/auth`);
   url.searchParams.set('scope', 'read:user user:email');
   url.searchParams.set('state', state);
   return url;
 }
 
-export async function exchangeGitHubCode(code: string) {
+export async function exchangeGitHubCode(code: string, origin: string) {
   const env = requireGithubEnv();
   const response = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -57,7 +57,7 @@ export async function exchangeGitHubCode(code: string) {
       client_id: env.clientId,
       client_secret: env.clientSecret,
       code,
-      redirect_uri: `${env.appOrigin}/callback/auth`,
+      redirect_uri: `${origin}/callback/auth`,
     }),
   });
 
@@ -114,6 +114,29 @@ function futureIso(seconds: number | undefined) {
   return toSqlDate(new Date(Date.now() + seconds * 1000));
 }
 
+async function shouldAssignAdminToUser(existingUserId?: number) {
+  const [firstUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .orderBy(asc(users.id))
+    .limit(1);
+
+  if (!firstUser) {
+    return true;
+  }
+
+  if (existingUserId !== firstUser.id) {
+    return false;
+  }
+
+  const [adminStats] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(eq(users.role, 'admin'));
+
+  return Number(adminStats?.count ?? 0) === 0;
+}
+
 export async function upsertGitHubUserAndToken(token: GitHubTokenResponse) {
   if (!token.access_token) {
     throw new HttpError(400, 'BAD_REQUEST', 'Missing GitHub access token');
@@ -139,15 +162,24 @@ export async function upsertGitHubUserAndToken(token: GitHubTokenResponse) {
     updatedAt: now,
   };
 
+  const assignAdmin = await shouldAssignAdminToUser(existingUser?.id);
+
   const [user] = existingUser
     ? await db
         .update(users)
-        .set(userValues)
+        .set({
+          ...userValues,
+          ...(assignAdmin ? { role: 'admin' as const } : {}),
+        })
         .where(eq(users.id, existingUser.id))
         .returning()
     : await db
         .insert(users)
-        .values({ ...userValues, createdAt: now })
+        .values({
+          ...userValues,
+          role: assignAdmin ? 'admin' : 'user',
+          createdAt: now,
+        })
         .returning();
 
   await db

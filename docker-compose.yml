@@ -1,0 +1,31 @@
+services:
+  onefile:
+    build: .
+    image: onefile:latest
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_SECRET: ${APP_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}
+    ports:
+      - '127.0.0.1:27507:27507'
+    volumes:
+      - onefile-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(''http://127.0.0.1:'' + (process.env.PORT || 27507) + ''/'').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  onefile-data:

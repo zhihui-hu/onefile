@@ -1,5 +1,5 @@
 import { HttpError, ok, withApiHandler } from '@/lib/api/response';
-import { getAuthContext } from '@/lib/auth/api-tokens';
+import { getAuthContext } from '@/lib/auth/api-keys';
 import { db } from '@/lib/db/client';
 import { fileUploads } from '@/lib/db/schema';
 import {
