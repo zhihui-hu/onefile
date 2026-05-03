@@ -8,7 +8,6 @@ import type {
   CompleteMultipartUploadResult,
   CreateMultipartUploadInput,
   CreateMultipartUploadResult,
-  CreateSingleUploadUrlInput,
   DeleteObjectInput,
   DeleteObjectResult,
   HeadObjectInput,
@@ -16,8 +15,6 @@ import type {
   ListStorageBucketsResult,
   ListStorageObjectsInput,
   ListStorageObjectsResult,
-  PresignMultipartPartInput,
-  PresignedUploadUrl,
   PutObjectInput,
   PutObjectResult,
   StorageAdapter,
@@ -27,11 +24,9 @@ import type {
 } from './types';
 import {
   basenameFromObjectPath,
-  createPresignedUploadUrl,
   dateFromUnknown,
   getExtraString,
   normalizeErrorInfo,
-  normalizeExpiresInSeconds,
   normalizeListLimit,
   normalizeObjectKey,
   normalizeOptionalString,
@@ -146,21 +141,6 @@ export class TencentCosStorageAdapter implements StorageAdapter {
     };
   }
 
-  async createSingleUploadUrl(
-    input: CreateSingleUploadUrlInput,
-  ): Promise<PresignedUploadUrl> {
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const url = this.client.getObjectUrl({
-      Bucket: this.bucketName(input.bucket),
-      Region: this.bucketRegion(input.region),
-      Key: normalizeObjectKey(input.key),
-      Sign: true,
-      Method: 'PUT',
-      Expires: expiresInSeconds,
-    });
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds);
-  }
-
   async createMultipartUpload(
     input: CreateMultipartUploadInput,
   ): Promise<CreateMultipartUploadResult> {
@@ -171,25 +151,6 @@ export class TencentCosStorageAdapter implements StorageAdapter {
       ContentType: input.contentType,
     });
     return { bucket: input.bucket, key: input.key, uploadId: output.UploadId };
-  }
-
-  async presignMultipartPart(
-    input: PresignMultipartPartInput,
-  ): Promise<PresignedUploadUrl> {
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const url = this.client.getObjectUrl({
-      Bucket: this.bucketName(input.bucket),
-      Region: this.bucketRegion(input.region),
-      Key: normalizeObjectKey(input.key),
-      Sign: true,
-      Method: 'PUT',
-      Expires: expiresInSeconds,
-      Query: {
-        uploadId: input.uploadId,
-        partNumber: input.partNumber,
-      },
-    });
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds);
   }
 
   async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {

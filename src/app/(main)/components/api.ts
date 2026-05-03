@@ -16,7 +16,6 @@ import type {
   UploadDirectResult,
   UploadInitPayload,
   UploadInitResult,
-  UploadPartResult,
 } from './types';
 
 type JsonObject = Record<string, unknown>;
@@ -552,17 +551,6 @@ export function proxyUploadPart(
   );
 }
 
-export async function createUploadPart(
-  uploadId: string,
-  payload: { part_number: number; content_length: number },
-) {
-  return jsonRequest<UploadPartResult>(
-    `/api/uploads/${uploadId}/parts`,
-    'POST',
-    payload,
-  );
-}
-
 export async function completeUpload(
   uploadId: string,
   payload: {
@@ -696,14 +684,6 @@ export function publicUpload(
     xhr.setRequestHeader('Accept', 'application/json');
     xhr.send(formData);
   });
-}
-
-export function getSignedUrl(result: {
-  upload_url?: string;
-  presigned_url?: string;
-  url?: string;
-}) {
-  return result.upload_url || result.presigned_url || result.url || '';
 }
 
 function xhrResponse(xhr: XMLHttpRequest) {

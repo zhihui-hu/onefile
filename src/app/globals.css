@@ -129,6 +129,31 @@
   html {
     @apply h-full overflow-hidden font-sans;
   }
+
+  a[href],
+  button:not(:disabled),
+  select:not(:disabled),
+  summary,
+  label[for],
+  input[type='button']:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='color']:not(:disabled),
+  input[type='file']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='reset']:not(:disabled),
+  input[type='submit']:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='link']:not([aria-disabled='true']),
+  [role='menuitem']:not([aria-disabled='true']):not([data-disabled]),
+  [role='menuitemcheckbox']:not([aria-disabled='true']):not([data-disabled]),
+  [role='menuitemradio']:not([aria-disabled='true']):not([data-disabled]),
+  [role='option']:not([aria-disabled='true']):not([data-disabled]),
+  [role='tab']:not([aria-disabled='true']):not(:disabled),
+  [data-slot$='trigger']:not(:disabled):not([aria-disabled='true']):not(
+      [data-disabled]
+    ) {
+    cursor: pointer;
+  }
 }
 
 /*

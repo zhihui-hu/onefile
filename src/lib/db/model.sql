@@ -1,9 +1,11 @@
 -- OneFile standalone schema
 -- Design target:
--- 1. Browser uploads directly to object storage through presigned URLs.
--- 2. The server stores accounts, buckets, transient upload state, and access
+-- 1. Browsers and API clients upload to OneFile; the server writes objects
+--    to configured object storage providers.
+-- 2. The server stores accounts, buckets, transient multipart state, and access
 --    tokens only. Object storage is the source of truth for file listings.
--- 3. File bytes and chunk bytes are never stored on the application server.
+-- 3. File bytes and chunk bytes are streamed through the application server,
+--    not persisted there.
 -- 4. Authentication currently supports GitHub OAuth only.
 -- 5. Access JWTs are stateless; refresh tokens are optional and stored as hashes
 --    only when you need long-lived login, logout, and revocation.
@@ -124,14 +126,14 @@ CREATE TABLE IF NOT EXISTS onefile_storage_buckets (
 CREATE INDEX IF NOT EXISTS idx_onefile_storage_buckets_user_id ON onefile_storage_buckets(user_id);
 CREATE INDEX IF NOT EXISTS idx_onefile_storage_buckets_storage_account_id ON onefile_storage_buckets(storage_account_id);
 
--- Ephemeral upload intent/state for direct uploads.
+-- Ephemeral upload intent/state for server-side multipart uploads.
 -- File listings are read from object storage through provider SDKs, so completed
 -- uploads do not create a long-lived row in a files table.
 -- Completed rows may be kept briefly for idempotent finalize/retry handling,
 -- then deleted by the cleanup job.
--- For small files, upload_mode = 'single' and provider_upload_id is NULL.
--- For large files, upload_mode = 'multipart' and provider_upload_id stores the
--- storage provider's multipart upload id.
+-- Browser/object-storage direct upload has been removed; small files use
+-- /api/uploads/direct and complete synchronously without a row here.
+-- Multipart rows store the storage provider's multipart upload id.
 CREATE TABLE IF NOT EXISTS onefile_file_uploads (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL,
@@ -165,8 +167,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_onefile_file_uploads_active_object
   ON onefile_file_uploads(bucket_id, object_key)
   WHERE status IN ('initiated', 'uploading');
 
--- Multipart upload part metadata only. Presigned URLs are intentionally not
--- stored because they expire and can leak write access.
+-- Multipart upload part metadata only. Chunks are submitted to the server and
+-- uploaded to object storage by provider SDKs.
 CREATE TABLE IF NOT EXISTS onefile_file_upload_parts (
   upload_id TEXT NOT NULL,
   part_number INTEGER NOT NULL CHECK (part_number > 0),

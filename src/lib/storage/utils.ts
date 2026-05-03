@@ -1,12 +1,5 @@
-import type {
-  PresignedUploadUrl,
-  StorageAdapterConfig,
-  StorageChecksum,
-  StorageErrorInfo,
-  StorageHttpMethod,
-} from './types';
+import type { StorageAdapterConfig, StorageErrorInfo } from './types';
 
-const DEFAULT_PRESIGN_EXPIRES_SECONDS = 15 * 60;
 const MAX_LIST_LIMIT = 1000;
 
 type UnknownRecord = Record<string, unknown>;
@@ -83,32 +76,6 @@ export function normalizeListLimit(limit?: number): number {
   return Math.min(Math.max(Math.trunc(limit), 1), MAX_LIST_LIMIT);
 }
 
-export function normalizeExpiresInSeconds(expiresInSeconds?: number): number {
-  if (!expiresInSeconds || !Number.isFinite(expiresInSeconds)) {
-    return DEFAULT_PRESIGN_EXPIRES_SECONDS;
-  }
-
-  return Math.max(1, Math.trunc(expiresInSeconds));
-}
-
-export function expiresAtFromNow(expiresInSeconds: number): Date {
-  return new Date(Date.now() + expiresInSeconds * 1000);
-}
-
-export function createPresignedUploadUrl(
-  method: StorageHttpMethod,
-  url: string,
-  expiresInSeconds: number,
-  headers: Record<string, string> = {},
-): PresignedUploadUrl {
-  return {
-    method,
-    url,
-    headers,
-    expiresAt: expiresAtFromNow(expiresInSeconds),
-  };
-}
-
 export function basenameFromObjectPath(path: string): string {
   const withoutTrailingSlash = path.endsWith('/') ? path.slice(0, -1) : path;
   const slashIndex = withoutTrailingSlash.lastIndexOf('/');
@@ -141,29 +108,6 @@ export function numberFromUnknown(value: unknown): number | undefined {
   }
 
   return undefined;
-}
-
-export function checksumHeaders(
-  checksum?: StorageChecksum,
-): Record<string, string> {
-  if (!checksum) {
-    return {};
-  }
-
-  switch (checksum.algorithm) {
-    case 'content-md5':
-      return { 'content-md5': checksum.value };
-    case 'crc32':
-      return { 'x-amz-checksum-crc32': checksum.value };
-    case 'crc32c':
-      return { 'x-amz-checksum-crc32c': checksum.value };
-    case 'crc64nvme':
-      return { 'x-amz-checksum-crc64nvme': checksum.value };
-    case 'sha1':
-      return { 'x-amz-checksum-sha1': checksum.value };
-    case 'sha256':
-      return { 'x-amz-checksum-sha256': checksum.value };
-  }
 }
 
 export function normalizeErrorInfo(error: unknown): StorageErrorInfo {

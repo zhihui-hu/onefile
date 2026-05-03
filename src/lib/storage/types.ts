@@ -16,8 +16,6 @@ export type S3CompatibleProviderId =
 
 export type StorageObjectKind = 'directory' | 'file';
 
-export type StorageHttpMethod = 'PUT' | 'POST' | 'DELETE';
-
 export type StorageChecksumAlgorithm =
   | 'content-md5'
   | 'crc32'
@@ -102,25 +100,6 @@ export interface ListStorageObjectsResult {
   isTruncated: boolean;
 }
 
-export interface CreateSingleUploadUrlInput {
-  bucket: string;
-  region?: string;
-  key: string;
-  expiresInSeconds?: number;
-  contentType?: string;
-  contentLength?: number;
-  checksum?: StorageChecksum;
-  metadata?: Record<string, string>;
-  preventOverwrite?: boolean;
-}
-
-export interface PresignedUploadUrl {
-  method: StorageHttpMethod;
-  url: string;
-  headers: Record<string, string>;
-  expiresAt: Date;
-}
-
 export interface CreateMultipartUploadInput {
   bucket: string;
   region?: string;
@@ -133,17 +112,6 @@ export interface CreateMultipartUploadResult {
   bucket: string;
   key: string;
   uploadId: string;
-}
-
-export interface PresignMultipartPartInput {
-  bucket: string;
-  region?: string;
-  key: string;
-  uploadId: string;
-  partNumber: number;
-  expiresInSeconds?: number;
-  contentLength?: number;
-  checksum?: StorageChecksum;
 }
 
 export interface CompletedMultipartPart {
@@ -249,15 +217,9 @@ export interface StorageAdapter {
   listObjects(
     input: ListStorageObjectsInput,
   ): Promise<ListStorageObjectsResult>;
-  createSingleUploadUrl(
-    input: CreateSingleUploadUrlInput,
-  ): Promise<PresignedUploadUrl>;
   createMultipartUpload(
     input: CreateMultipartUploadInput,
   ): Promise<CreateMultipartUploadResult>;
-  presignMultipartPart(
-    input: PresignMultipartPartInput,
-  ): Promise<PresignedUploadUrl>;
   uploadPart(input: UploadPartInput): Promise<UploadPartResult>;
   completeMultipartUpload(
     input: CompleteMultipartUploadInput,

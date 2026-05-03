@@ -121,14 +121,14 @@ export type PublicUploadResult = UploadDirectResult & {
 export type UploadMode = 'single' | 'multipart';
 
 export type UploadInitPayload = {
-  bucket_id?: number | string;
+  bucket_id: number | string;
   object_key?: string;
   current_prefix?: string;
   relative_path?: string;
   original_filename: string;
   file_size: number;
   mime_type: string;
-  upload_mode: UploadMode;
+  upload_mode: 'multipart';
   part_size?: number;
   total_parts?: number;
   content_md5?: string;
@@ -141,11 +141,7 @@ export type UploadInitResult = {
   bucket_id?: number | string;
   bucket_name?: string;
   object_key?: string;
-  upload_url?: string;
-  presigned_url?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  method?: string;
+  upload_mode?: 'multipart';
   part_size?: number;
   total_parts?: number;
   expires_at?: string;
@@ -165,15 +161,6 @@ export type UploadDirectResult = {
   compressed?: boolean;
   etag?: string | null;
   location?: string | null;
-};
-
-export type UploadPartResult = {
-  part_number?: number;
-  upload_url?: string;
-  presigned_url?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  method?: string;
 };
 
 export type UploadCompletePart = {

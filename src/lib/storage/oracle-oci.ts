@@ -12,7 +12,6 @@ import type {
   ListStorageBucketsResult,
   ListStorageObjectsInput,
   ListStorageObjectsResult,
-  PresignedUploadUrl,
   PutObjectInput,
   PutObjectResult,
   StorageAdapter,
@@ -369,16 +368,8 @@ export class OracleOciStorageAdapter implements StorageAdapter {
     };
   }
 
-  async createSingleUploadUrl(): Promise<PresignedUploadUrl> {
-    throw new Error('Oracle OCI does not support browser presigned uploads');
-  }
-
   async createMultipartUpload(): Promise<CreateMultipartUploadResult> {
     throw new Error('Oracle OCI multipart uploads are not supported');
-  }
-
-  async presignMultipartPart(): Promise<PresignedUploadUrl> {
-    throw new Error('Oracle OCI does not support browser presigned uploads');
   }
 
   async uploadPart(): Promise<UploadPartResult> {

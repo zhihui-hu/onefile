@@ -103,7 +103,7 @@ export function SortHeader({
       type="button"
       size="sm"
       variant="ghost"
-      className="h-7 px-1 text-xs"
+      className="h-7 cursor-pointer px-1 text-xs"
       onClick={column.getToggleSortingHandler()}
     >
       {label}

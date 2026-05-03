@@ -4,6 +4,10 @@
   <img src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/React-19-282C34?logo=react&logoColor=61DAFB" alt="React 19" />
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/shadcn/ui-black?style=flat&logo=vercel&logoColor=white" alt="shadcn/ui" />
+  <img src="https://img.shields.io/badge/TanStack_Query-v5-FF4154?logo=tanstack&logoColor=white" alt="TanStack Query" />
+  <img src="https://img.shields.io/badge/TanStack_Table-v8-FF4154?logo=tanstack&logoColor=white" alt="TanStack Table" />
   <img src="https://img.shields.io/badge/SQLite-lightweight-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
 </p>
@@ -21,7 +25,7 @@ OneFile 是一个很轻的对象存储上传后台。它适合拿来做自建图
 - **图片压缩**：API 上传和公开上传可开启 WebP 压缩，适合博客、论坛、Markdown 图片流。
 - **多 bucket 负载均衡**：上传接口可以不传 `bucket_id`，OneFile 会自动选择当前用户可用 bucket，分散上传压力。
 - **多云对象存储聚合**：支持 AWS S3、Cloudflare R2、Backblaze B2、Oracle Object Storage、阿里云 OSS、腾讯云 COS。
-- **后端不接管大流量**：浏览器直传对象存储，服务端主要负责认证、调度和签发上传地址。
+- **服务端统一写入对象存储**：浏览器和外部工具只和 OneFile 通信，认证、压缩、bucket 选择和对象存储写入都由服务端收口。
 
 ## 适合场景
 
@@ -43,30 +47,62 @@ OneFile 是一个很轻的对象存储上传后台。它适合拿来做自建图
 | 阿里云 OSS            | Aliyun OSS SDK         |
 | 腾讯云 COS            | Tencent COS SDK        |
 
+## 架构图
+
+```mermaid
+flowchart LR
+  user["登录用户 / 管理后台"]
+  tools["图床项目 / Markdown 编辑器 / 脚本 / CI"]
+  public["公开上传链接 / 二维码"]
+
+  app["OneFile<br/>Next.js 应用"]
+  auth["GitHub OAuth<br/>Session / API key"]
+  db["SQLite<br/>用户、账号、bucket、API key、上传状态"]
+  backup["SQL 导入导出<br/>迁移和备份"]
+
+  scheduler["上传调度<br/>压缩策略 / bucket 负载均衡"]
+  single["Direct Upload API<br/>小文件 / 图片压缩"]
+  multipart["Multipart Upload API<br/>服务端分片上传"]
+
+  storage["对象存储<br/>S3 / R2 / B2 / OCI / OSS / COS"]
+
+  user --> app
+  tools -->|"Bearer API key"| app
+  public -->|"UUID 上传入口"| app
+
+  app --> auth
+  app <--> db
+  db <--> backup
+  app --> scheduler
+
+  scheduler --> single
+  scheduler --> multipart
+  single --> storage
+  multipart --> storage
+
+  app -->|"文件浏览 / 删除 / 复制链接"| storage
+```
+
 ## 快速开始
 
-推荐使用 Docker Compose。默认服务端口是 `27507`，数据保存在 Docker volume `onefile-data`。
+最快的方式是直接跑官方 GHCR 镜像。默认服务端口是 `27507`，数据保存在 Docker volume `onefile-data`。
 
 1. 创建 GitHub OAuth App，回调地址填写：
 
    ```text
-   https://你的域名/callback/auth
+   https://[域名/ip:port]/callback/auth
    ```
 
-2. 创建 `.env`：
+2. docker：
 
    ```bash
-   GITHUB_CLIENT_ID=your_github_client_id
-   GITHUB_CLIENT_SECRET=your_github_client_secret
-
-   # 可选：不填时会自动生成并保存到 /app/data/.onefile-secret
-   # APP_SECRET=replace_with_a_long_random_secret
+   docker run -d --name onefile --restart unless-stopped -p 27507:27507 -e GITHUB_CLIENT_ID=your_github_client_id -e GITHUB_CLIENT_SECRET=your_github_client_secret -v onefile-data:/app/data ghcr.io/zhihui-hu/onefile:latest
    ```
 
-3. 启动：
+3. 打开应用：
 
-   ```bash
-   docker compose up -d
+   ```text
+   http://[域名/ip:port]
    ```
 
 4. 登录后按这个顺序使用：
@@ -91,10 +127,38 @@ Authorization: Bearer ofk_xxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 上传后的图片仍然可以在 OneFile 后台管理，可以复制链接、查看目录、删除对象；如果开启图片压缩，上传图片会转为 WebP；如果 API key 没有固定 bucket，服务端会按负载均衡策略选择 bucket。
 
+## 技术栈
+
+- **前端**：Next.js 16、React 19、TypeScript、Tailwind CSS 4、shadcn/ui、Lucide React
+- **数据和状态**：TanStack Query v5、TanStack Table v8
+- **后端和存储**：Next.js Route Handlers、Drizzle ORM、better-sqlite3、对象存储 SDK
+- **部署**：Docker / Docker Compose，默认镜像 `ghcr.io/zhihui-hu/onefile:latest`
+
 <details>
 <summary>展开：部署和迁移说明</summary>
 
-### Docker Compose
+### Docker Compose 部署
+
+`docker-compose.yml` 默认使用：
+
+```text
+ghcr.io/zhihui-hu/onefile:latest
+```
+
+先创建 `.env`：
+
+```bash
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# 可选：不填时会自动生成并保存到 /app/data/.onefile-secret
+# APP_SECRET=replace_with_a_long_random_secret
+
+# 可选：反向代理不能正确传递 Host / X-Forwarded-* 时再填写
+# APP_ORIGIN=https://onefile.example.com
+```
+
+启动：
 
 ```bash
 docker compose pull
@@ -162,6 +226,20 @@ OneFile 只需要一个应用密钥，用于 session 签名和存储凭证加密
 APP_ORIGIN=https://onefile.example.com
 ```
 
+### 本地构建镜像
+
+如果不想使用 GHCR 镜像，也可以本地构建：
+
+```bash
+docker build -t onefile .
+
+docker run -d --name onefile \
+  -p 27507:27507 \
+  --env-file .env \
+  -v onefile-data:/app/data \
+  onefile
+```
+
 </details>
 
 <details>
@@ -175,30 +253,25 @@ export ONEFILE_API_KEY="ofk_xxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 export FILE="./image.png"
 ```
 
-创建上传会话：
+小文件或图片可以直接提交给 OneFile 服务端：
 
 ```bash
-curl -fsS -X POST "$ONEFILE_BASE_URL/api/uploads" \
+curl -fsS -X POST "$ONEFILE_BASE_URL/api/uploads/direct" \
   -H "Authorization: Bearer $ONEFILE_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "original_filename": "image.png",
-    "file_size": 12345,
-    "mime_type": "image/png",
-    "upload_mode": "single"
-  }'
+  -F "file=@$FILE"
 ```
 
-响应会返回 `upload_url`、`upload_id`、`bucket_id`、`bucket_name` 和 `object_key`。把文件 PUT 到 `upload_url` 后，再调用：
+如果需要指定对象 key，可以额外传：
 
 ```bash
-curl -fsS -X POST "$ONEFILE_BASE_URL/api/uploads/$UPLOAD_ID/complete" \
+curl -fsS -X POST "$ONEFILE_BASE_URL/api/uploads/direct" \
   -H "Authorization: Bearer $ONEFILE_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{}'
+  -F "file=@$FILE" \
+  -F "object_key=images/image.png" \
+  -F "original_filename=image.png"
 ```
 
-也可以使用 `/api/uploads/direct` 让 API key 调用走服务端直传，使用 key 上配置的 bucket 和压缩策略。更完整的示例请访问应用内 `/api-docs`。
+响应会返回 `bucket_id`、`bucket_name`、`object_key`、`mime_type`、`compressed` 等信息。使用 API key 调用时，默认使用 key 上配置的 bucket 和压缩策略；大文件请使用 `/api/uploads` 创建 multipart 会话，再逐片 POST 到 `/api/uploads/:id/parts/upload`。更完整的示例请访问应用内 `/api-docs`。
 
 </details>
 
@@ -235,6 +308,19 @@ pnpm lint
 ## 许可证
 
 本项目使用 [AGPL-3.0-only](./LICENSE) 许可证。
+
+## 致谢
+
+- [Next.js](https://nextjs.org/) - React 全栈框架
+- [shadcn/ui](https://ui.shadcn.com/) - UI 组件体系
+- [Lucide](https://lucide.dev/) - 图标库
+- [TanStack Query](https://tanstack.com/query) - 前端数据请求与缓存
+- [TanStack Table](https://tanstack.com/table) - 表格能力
+- [Drizzle ORM](https://orm.drizzle.team/) - TypeScript ORM
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - SQLite driver
+- [AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript/) - S3 兼容存储接入
+- [ali-oss](https://github.com/ali-sdk/ali-oss) - 阿里云 OSS SDK
+- [cos-nodejs-sdk-v5](https://github.com/tencentyun/cos-nodejs-sdk-v5) - 腾讯云 COS SDK
 
 ## 安全提示
 

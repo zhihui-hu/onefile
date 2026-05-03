@@ -12,7 +12,6 @@ import {
   UploadPartCommand,
   type _Object,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import type {
   AbortMultipartUploadInput,
@@ -22,7 +21,6 @@ import type {
   CompleteMultipartUploadResult,
   CreateMultipartUploadInput,
   CreateMultipartUploadResult,
-  CreateSingleUploadUrlInput,
   DeleteObjectInput,
   DeleteObjectResult,
   HeadObjectInput,
@@ -30,8 +28,6 @@ import type {
   ListStorageBucketsResult,
   ListStorageObjectsInput,
   ListStorageObjectsResult,
-  PresignMultipartPartInput,
-  PresignedUploadUrl,
   PutObjectInput,
   PutObjectResult,
   S3CompatibleProviderId,
@@ -43,11 +39,8 @@ import type {
 } from './types';
 import {
   basenameFromObjectPath,
-  checksumHeaders,
-  createPresignedUploadUrl,
   normalizeDelimiter,
   normalizeErrorInfo,
-  normalizeExpiresInSeconds,
   normalizeListLimit,
   normalizeObjectKey,
   normalizeOptionalString,
@@ -135,27 +128,6 @@ export class S3CompatibleStorageAdapter implements StorageAdapter {
     };
   }
 
-  async createSingleUploadUrl(
-    input: CreateSingleUploadUrlInput,
-  ): Promise<PresignedUploadUrl> {
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const headers = checksumHeaders(input.checksum);
-    const command = new PutObjectCommand({
-      Bucket: input.bucket,
-      Key: normalizeObjectKey(input.key),
-      ContentType: input.contentType,
-      ContentLength: input.contentLength,
-      Metadata: input.metadata,
-      IfNoneMatch: input.preventOverwrite ? '*' : undefined,
-      ...checksumCommandInput(input.checksum),
-    });
-
-    const url = await getSignedUrl(this.client, command, {
-      expiresIn: expiresInSeconds,
-    });
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds, headers);
-  }
-
   async createMultipartUpload(
     input: CreateMultipartUploadInput,
   ): Promise<CreateMultipartUploadResult> {
@@ -171,26 +143,6 @@ export class S3CompatibleStorageAdapter implements StorageAdapter {
       throw new Error('Storage provider did not return multipart upload id');
     }
     return { bucket: input.bucket, key: input.key, uploadId: output.UploadId };
-  }
-
-  async presignMultipartPart(
-    input: PresignMultipartPartInput,
-  ): Promise<PresignedUploadUrl> {
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const headers = checksumHeaders(input.checksum);
-    const command = new UploadPartCommand({
-      Bucket: input.bucket,
-      Key: normalizeObjectKey(input.key),
-      UploadId: input.uploadId,
-      PartNumber: input.partNumber,
-      ContentLength: input.contentLength,
-      ...checksumCommandInput(input.checksum),
-    });
-
-    const url = await getSignedUrl(this.client, command, {
-      expiresIn: expiresInSeconds,
-    });
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds, headers);
   }
 
   async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {
@@ -317,26 +269,4 @@ function objectToItem(object: _Object): StorageObjectItem {
     etag: object.ETag,
     storageClass: object.StorageClass,
   };
-}
-
-function checksumCommandInput(
-  checksum: CreateSingleUploadUrlInput['checksum'],
-) {
-  if (!checksum) {
-    return {};
-  }
-  switch (checksum.algorithm) {
-    case 'content-md5':
-      return { ContentMD5: checksum.value };
-    case 'crc32':
-      return { ChecksumCRC32: checksum.value };
-    case 'crc32c':
-      return { ChecksumCRC32C: checksum.value };
-    case 'crc64nvme':
-      return { ChecksumCRC64NVME: checksum.value };
-    case 'sha1':
-      return { ChecksumSHA1: checksum.value };
-    case 'sha256':
-      return { ChecksumSHA256: checksum.value };
-  }
 }

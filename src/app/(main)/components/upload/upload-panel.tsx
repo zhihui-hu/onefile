@@ -26,7 +26,6 @@ import {
   filesFromDataTransfer,
   filesFromFolderInput,
   partSizeFor,
-  putSignedUrl,
   relativePath,
 } from '@/app/(main)/components/upload/upload-utils';
 import { Button } from '@/components/ui/button';

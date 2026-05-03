@@ -14,14 +14,14 @@ const endpoints = [
   ['GET', '/api/storage/buckets', '列出已同步 bucket'],
   ['GET', '/api/files?bucket_id=&prefix=&search=', '浏览真实对象存储目录'],
   ['DELETE', '/api/files', '按 bucket_id + object_key 删除对象'],
-  ['POST', '/api/uploads', '创建单文件或分片上传会话，可省略 bucket_id'],
+  ['POST', '/api/uploads', '创建服务端分片上传会话'],
   [
     'POST',
     '/api/uploads/direct',
-    '服务端直传；API key 调用使用 key 上保存的 bucket 和压缩策略',
+    '服务端上传；API key 调用使用 key 上保存的 bucket 和压缩策略',
   ],
-  ['POST', '/api/public-uploads/:uuid', '公开上传链接直传，不暴露 raw API key'],
-  ['POST', '/api/uploads/:id/parts', '签发分片上传 URL'],
+  ['POST', '/api/public-uploads/:uuid', '公开上传链接上传，不暴露 raw API key'],
+  ['POST', '/api/uploads/:id/parts/upload', '通过服务端上传一个分片'],
   ['POST', '/api/uploads/:id/complete', '完成上传会话'],
   ['POST', '/api/uploads/:id/abort', '取消分片上传'],
 ] as const;
@@ -101,13 +101,13 @@ const errors = [
     4000,
     'BAD_REQUEST',
     400,
-    '请求体不是合法 JSON、路径参数非法或业务参数不合法。',
+    '请求体不是合法 JSON、form-data 非法、路径参数非法或业务参数不合法。',
   ],
   [4010, 'UNAUTHORIZED', 401, '未登录，或 API key 缺失/无效。'],
   [4030, 'FORBIDDEN', 403, '登录用户或 key scope 无权访问该资源。'],
   [4040, 'NOT_FOUND', 404, '资源不存在、不属于当前用户，或没有可用 bucket。'],
   [4090, 'CONFLICT', 409, '资源冲突，例如唯一字段重复或 key 生成冲突。'],
-  [4100, 'UPLOAD_EXPIRED', 410, '上传会话或 presigned URL 已过期。'],
+  [4100, 'UPLOAD_EXPIRED', 410, '上传会话已过期。'],
   [4220, 'VALIDATION_ERROR', 422, '请求字段缺失、路径非法或参数格式错误。'],
   [4600, 'PROVIDER_ERROR', 460, '对象存储 SDK 返回错误。'],
   [5000, 'INTERNAL_ERROR', 500, '服务端内部错误。'],
@@ -247,55 +247,33 @@ export default async function Page({ searchParams }: PageProps) {
         <h2 className="mt-10 text-xl font-semibold">上传</h2>
 
         <p>
-          后端签发 presigned URL，浏览器或脚本直传对象存储。创建上传时如果传
-          <code>bucket_id</code>，对象会写入该 bucket；如果省略{' '}
-          <code>bucket_id</code>
-          ，服务端会在当前用户可用 bucket
-          中按进行中上传和近期上传记录更少的策略自动选择，并在响应中返回实际
-          <code>bucket_id</code>。
+          文件先传到 OneFile 服务端，再由服务端写入对象存储。小文件使用
+          <code>/api/uploads/direct</code> 一次提交；大文件先创建 multipart
+          会话，再逐片上传到服务端。
         </p>
 
-        <h3 className="mt-6 font-semibold">创建上传会话</h3>
+        <h3 className="mt-6 font-semibold">创建分片上传会话</h3>
 
-        <CodeBlock>{`# 指定 bucket
+        <CodeBlock>{`# 创建 multipart 会话
 curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "bucket_id":12,
-    "object_key":"2026/04/28/report.pdf",
-    "original_filename":"report.pdf",
-    "file_size":7340032,
-    "mime_type":"application/pdf",
-    "upload_mode":"single"
-  }' \\
-  ${apiUrl('/api/uploads')}
-
-# 不指定 bucket，由服务端自动负载均衡选择
-curl -X POST -H "${curlAuthHeader}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "original_filename":"report.pdf",
-    "file_size":7340032,
-    "mime_type":"application/pdf",
-    "upload_mode":"single"
+    "object_key":"videos/big.mov",
+    "original_filename":"big.mov",
+    "file_size":2147483648,
+    "mime_type":"video/quicktime",
+    "upload_mode":"multipart",
+    "part_size":16777216
   }' \\
   ${apiUrl('/api/uploads')}`}</CodeBlock>
 
         <p>
           响应会包含 <code>bucket_id</code>、<code>bucket_name</code>、
-          <code>object_key</code> 和上传
-          URL；后续完成、取消、分片签名都只需要使用返回的
+          <code>object_key</code>、<code>part_size</code> 和{' '}
+          <code>total_parts</code>；后续完成或取消只需要使用返回的
           <code>upload_id</code>。
         </p>
-
-        <h3 className="mt-6 font-semibold">完成单文件上传</h3>
-
-        <CodeBlock>{`curl -X PUT -T ./report.pdf "<upload_url>"
-
-curl -X POST -H "${curlAuthHeader}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"etag":"<etag-from-put-response>"}' \\
-  ${apiUrl('/api/uploads/:id/complete')}`}</CodeBlock>
 
         <h3 className="mt-6 font-semibold">分片上传</h3>
 
@@ -306,28 +284,13 @@ curl -X POST -H "${curlAuthHeader}" \\
           开始，并会自动增大以保证总 part 数不超过 10000。
         </p>
 
-        <CodeBlock>{`# 1. 创建 multipart 会话
+        <CodeBlock>{`# 1. 将每个分片提交给 OneFile 服务端
 curl -X POST -H "${curlAuthHeader}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "object_key":"videos/big.mov",
-    "original_filename":"big.mov",
-    "file_size":2147483648,
-    "mime_type":"video/quicktime",
-    "upload_mode":"multipart",
-    "part_size":16777216
-  }' \\
-  ${apiUrl('/api/uploads')}
+  -F "part_number=1" \\
+  -F "chunk=@part-0001" \\
+  ${apiUrl('/api/uploads/:id/parts/upload')}
 
-# 2. 逐片签 URL，并用返回的 upload_url 直传对象存储
-curl -X POST -H "${curlAuthHeader}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"part_number":1,"content_length":16777216}' \\
-  ${apiUrl('/api/uploads/:id/parts')}
-
-curl -X PUT --data-binary @part-0001 "<upload_url>"
-
-# 3. 带每片 ETag 完成 multipart
+# 2. 带每片 ETag 完成 multipart
 curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -338,15 +301,15 @@ curl -X POST -H "${curlAuthHeader}" \\
   }' \\
   ${apiUrl('/api/uploads/:id/complete')}`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">API key 直传</h3>
+        <h3 className="mt-6 font-semibold">API key 服务端上传</h3>
 
         <p>
           <code>/api/uploads/direct</code> 接收 <code>multipart/form-data</code>
           ，适合脚本直接把文件交给 OneFile 服务端写入对象存储。使用 API key
           调用时，bucket 和图片压缩策略来自创建 key 时保存的配置；不需要每次传{' '}
           <code>bucket_id</code> 或 <code>compress</code>。未指定 bucket 的 key
-          会在可用 bucket 中做默认负载均衡。直传会经过服务端内存，当前限制 100
-          MiB；大文件仍建议使用 presigned URL 或分片上传。
+          会在可用 bucket 中做默认负载均衡。上传会经过服务端内存，当前限制 100
+          MiB；大文件请使用上面的服务端分片上传。
         </p>
 
         <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\

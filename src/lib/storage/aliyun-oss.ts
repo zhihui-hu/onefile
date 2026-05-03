@@ -8,7 +8,6 @@ import type {
   CompleteMultipartUploadResult,
   CreateMultipartUploadInput,
   CreateMultipartUploadResult,
-  CreateSingleUploadUrlInput,
   DeleteObjectInput,
   DeleteObjectResult,
   HeadObjectInput,
@@ -16,8 +15,6 @@ import type {
   ListStorageBucketsResult,
   ListStorageObjectsInput,
   ListStorageObjectsResult,
-  PresignMultipartPartInput,
-  PresignedUploadUrl,
   PutObjectInput,
   PutObjectResult,
   StorageAdapter,
@@ -27,11 +24,9 @@ import type {
 } from './types';
 import {
   basenameFromObjectPath,
-  createPresignedUploadUrl,
   dateFromUnknown,
   metadataFromHeaders,
   normalizeErrorInfo,
-  normalizeExpiresInSeconds,
   normalizeListLimit,
   normalizeObjectKey,
   normalizeOptionalString,
@@ -149,30 +144,6 @@ export class AliyunOssStorageAdapter implements StorageAdapter {
     };
   }
 
-  async createSingleUploadUrl(
-    input: CreateSingleUploadUrlInput,
-  ): Promise<PresignedUploadUrl> {
-    this.client.useBucket(input.bucket);
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const headers: Record<string, string> = {
-      ...(input.contentType ? { 'content-type': input.contentType } : {}),
-      ...(input.metadata
-        ? Object.fromEntries(
-            Object.entries(input.metadata).map(([key, value]) => [
-              `x-oss-meta-${key}`,
-              value,
-            ]),
-          )
-        : {}),
-    };
-    const url = await this.client.asyncSignatureUrl(
-      normalizeObjectKey(input.key),
-      { method: 'PUT', expires: expiresInSeconds, headers },
-      false,
-    );
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds, headers);
-  }
-
   async createMultipartUpload(
     input: CreateMultipartUploadInput,
   ): Promise<CreateMultipartUploadResult> {
@@ -189,26 +160,6 @@ export class AliyunOssStorageAdapter implements StorageAdapter {
       key: output.name ?? input.key,
       uploadId: output.uploadId,
     };
-  }
-
-  async presignMultipartPart(
-    input: PresignMultipartPartInput,
-  ): Promise<PresignedUploadUrl> {
-    this.client.useBucket(input.bucket);
-    const expiresInSeconds = normalizeExpiresInSeconds(input.expiresInSeconds);
-    const url = await this.client.asyncSignatureUrl(
-      normalizeObjectKey(input.key),
-      {
-        method: 'PUT',
-        expires: expiresInSeconds,
-        queries: {
-          partNumber: input.partNumber,
-          uploadId: input.uploadId,
-        },
-      },
-      false,
-    );
-    return createPresignedUploadUrl('PUT', url, expiresInSeconds);
   }
 
   async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {

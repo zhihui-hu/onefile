@@ -132,7 +132,7 @@ async function parseUploadFile(request: NextRequest) {
     throw new HttpError(
       400,
       'BAD_REQUEST',
-      'Direct upload cannot exceed 100 MiB; use presigned upload instead',
+      'Direct upload cannot exceed 100 MiB; use multipart upload instead',
       { max_direct_upload_size: MAX_DIRECT_UPLOAD_SIZE },
     );
   }
