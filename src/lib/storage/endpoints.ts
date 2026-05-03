@@ -5,10 +5,7 @@ export function optionalStorageString(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
-export function tencentBucketName(
-  bucketName: string,
-  accountId?: string | null,
-) {
+function tencentBucketName(bucketName: string, accountId?: string | null) {
   const normalizedAccountId = optionalStorageString(accountId);
   if (!normalizedAccountId || bucketName.endsWith(`-${normalizedAccountId}`)) {
     return bucketName;
@@ -17,7 +14,7 @@ export function tencentBucketName(
   return `${bucketName}-${normalizedAccountId}`;
 }
 
-export function defaultStorageRegion(provider: StorageProviderId) {
+function defaultStorageRegion(provider: StorageProviderId) {
   switch (provider) {
     case 's3':
       return 'us-east-1';
@@ -30,7 +27,7 @@ export function defaultStorageRegion(provider: StorageProviderId) {
   }
 }
 
-export function normalizeAliyunRegion(region?: string | null) {
+function normalizeAliyunRegion(region?: string | null) {
   return optionalStorageString(region)?.replace(/^oss-/, '') ?? null;
 }
 
@@ -45,16 +42,10 @@ export function storageRegionOrDefault(
   return optionalStorageString(region) ?? defaultStorageRegion(provider);
 }
 
-export function aliyunEndpointFromRegion(region?: string | null) {
+function aliyunEndpointFromRegion(region?: string | null) {
   const regionValue =
     normalizeAliyunRegion(region) ?? defaultStorageRegion('aliyun_oss');
   return `https://oss-${regionValue}.aliyuncs.com`;
-}
-
-export function tencentCosEndpointFromRegion(region?: string | null) {
-  const regionValue =
-    optionalStorageString(region) ?? defaultStorageRegion('tencent_cos');
-  return `https://{Bucket}.cos.${regionValue}.myqcloud.com`;
 }
 
 export function defaultStorageEndpoint({

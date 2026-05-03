@@ -11,8 +11,8 @@ import { secureCookiesForRequest } from '@/lib/request-origin';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { cookies, headers } from 'next/headers';
 
-export const SESSION_COOKIE = 'onefile_session';
-export const OAUTH_STATE_COOKIE = 'onefile_oauth_state';
+const SESSION_COOKIE = 'onefile_session';
+const OAUTH_STATE_COOKIE = 'onefile_oauth_state';
 
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 

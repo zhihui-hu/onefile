@@ -2,7 +2,7 @@ import { debugError, debugLog } from '@/lib/debug';
 import { NextResponse } from 'next/server';
 import { ZodError, type ZodSchema } from 'zod';
 
-export const API_ERROR_DEFINITIONS = {
+const API_ERROR_DEFINITIONS = {
   BAD_REQUEST: { code: 4000 },
   UNAUTHORIZED: { code: 4010 },
   FORBIDDEN: { code: 4030 },
@@ -14,7 +14,7 @@ export const API_ERROR_DEFINITIONS = {
   INTERNAL_ERROR: { code: 5000 },
 } as const;
 
-export type ApiErrorCode = keyof typeof API_ERROR_DEFINITIONS;
+type ApiErrorCode = keyof typeof API_ERROR_DEFINITIONS;
 
 export class HttpError extends Error {
   readonly status: number;
@@ -141,20 +141,4 @@ export async function withApiHandler<T>(
       error instanceof Error ? error.message : 'Unexpected server error';
     return fail(500, 'INTERNAL_ERROR', message);
   }
-}
-
-export function page<T>(
-  items: T[],
-  pageNum: number,
-  pageSize: number,
-  total?: number,
-) {
-  return {
-    items,
-    page: {
-      page_num: pageNum,
-      page_size: pageSize,
-      total: total ?? items.length,
-    },
-  };
 }

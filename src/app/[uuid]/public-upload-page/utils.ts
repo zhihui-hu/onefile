@@ -6,16 +6,12 @@ import type { StoredUpload } from './types';
 export const HISTORY_LIMIT = 80;
 export const IMAGE_BLUR_DATA_URL =
   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNlNWU3ZWIiLz48L3N2Zz4=';
-export const FALLBACK_IMAGE_DIMENSIONS = {
-  width: 200,
-  height: 200,
-};
 
-export function storageKey(uuid: string) {
+function storageKey(uuid: string) {
   return `onefile:public-upload:${uuid}:uploads:v1`;
 }
 
-export function isStoredUpload(value: unknown): value is StoredUpload {
+function isStoredUpload(value: unknown): value is StoredUpload {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<StoredUpload>;
   return (
@@ -45,7 +41,7 @@ export function writeUploadHistory(uuid: string, uploads: StoredUpload[]) {
   );
 }
 
-export function toAbsoluteUrl(value?: string | null) {
+function toAbsoluteUrl(value?: string | null) {
   if (!value) return '';
   try {
     return new URL(value, window.location.origin).toString();
@@ -54,7 +50,7 @@ export function toAbsoluteUrl(value?: string | null) {
   }
 }
 
-export function resultUrl(result: PublicUploadResult) {
+function resultUrl(result: PublicUploadResult) {
   return toAbsoluteUrl(result.url || result.location);
 }
 

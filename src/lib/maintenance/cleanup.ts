@@ -1,16 +1,10 @@
 import { db } from '@/lib/db/client';
-import {
-  authRefreshTokens,
-  fileUploads,
-  oauthTokens,
-  storageAccounts,
-  storageBuckets,
-} from '@/lib/db/schema';
+import { fileUploads, storageAccounts, storageBuckets } from '@/lib/db/schema';
 import { debugError, debugLog } from '@/lib/debug';
 import { adapterFromAccountForBucket } from '@/lib/storage-config';
 import { eq } from 'drizzle-orm';
 
-export async function abortOrphanUpload(uploadId: string) {
+async function abortOrphanUpload(uploadId: string) {
   try {
     const [upload] = await db
       .select({

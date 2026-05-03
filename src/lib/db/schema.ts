@@ -347,5 +347,4 @@ export const schema = {
 export type User = typeof users.$inferSelect;
 export type StorageAccount = typeof storageAccounts.$inferSelect;
 export type StorageBucket = typeof storageBuckets.$inferSelect;
-export type FileUpload = typeof fileUploads.$inferSelect;
 export type FileApiKey = typeof fileApiKeys.$inferSelect;

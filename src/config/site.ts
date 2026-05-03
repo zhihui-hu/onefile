@@ -3,6 +3,7 @@ import pkg from '../../package.json';
 export const siteConfig = {
   title: 'OneFile - 聚合对象存储上传平台',
   version: pkg.version,
+  githubUrl: 'https://github.com/zhihui-hu/onefile',
   description:
     'OneFile 是一个聚合上传平台，支持 OSS、COS、Cloudflare R2、AWS S3、Oracle Object Storage 等多云存储，提供大文件分片上传、断点续传与跨云文件管理。',
   keywords: [

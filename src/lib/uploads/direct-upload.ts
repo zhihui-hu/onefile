@@ -22,7 +22,7 @@ import { NextRequest } from 'next/server';
 const ONE_MIB = 1024 * 1024;
 const MAX_DIRECT_UPLOAD_SIZE = 100 * ONE_MIB;
 
-export type DirectUploadStrategy = {
+type DirectUploadStrategy = {
   bucketId?: number | string | null;
   compressImages: boolean;
   publicUploadUuid?: string | null;

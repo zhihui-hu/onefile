@@ -54,7 +54,7 @@ export const updateFileApiKeySchema = z.object({
   public_upload: z.enum(['revoke', 'regenerate']).optional(),
 });
 
-export type UpdateFileApiKeyInput = z.infer<typeof updateFileApiKeySchema>;
+type UpdateFileApiKeyInput = z.infer<typeof updateFileApiKeySchema>;
 
 export function parseFileApiKeyId(id: string) {
   const keyId = Number(id);

@@ -26,6 +26,8 @@ export function AuthGate() {
         </EmptyHeader>
         <EmptyContent>
           <Button asChild>
+            {/* API route starts the OAuth redirect; keep this as a full document navigation. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/api/auth/github/start">
               <LogIn data-icon="inline-start" />
               使用 GitHub 登录

@@ -15,7 +15,7 @@ export function sha256(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-export function timingSafeEqualString(left: string, right: string) {
+function timingSafeEqualString(left: string, right: string) {
   const leftBytes = TEXT_ENCODER.encode(left);
   const rightBytes = TEXT_ENCODER.encode(right);
   if (leftBytes.length !== rightBytes.length) {
@@ -67,7 +67,7 @@ export function decryptText(cipherText: string) {
   return decrypted.toString('utf8');
 }
 
-export function signValue(value: string) {
+function signValue(value: string) {
   return crypto
     .createHmac('sha256', getEnv().sessionSecret)
     .update(value)

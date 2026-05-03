@@ -16,7 +16,6 @@ import type {
   PutObjectResult,
   StorageAdapter,
   StorageAdapterConfig,
-  UploadPartInput,
   UploadPartResult,
 } from './types';
 import {

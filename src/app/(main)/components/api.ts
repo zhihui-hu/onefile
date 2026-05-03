@@ -387,13 +387,6 @@ export async function listFiles(params: {
   } satisfies FileListResult;
 }
 
-export async function deleteFile(payload: {
-  bucket_id: number | string;
-  object_key: string;
-}) {
-  return jsonRequest<unknown>('/api/files', 'DELETE', payload);
-}
-
 export async function deleteFiles(payload: {
   bucket_id: number | string;
   object_keys: string[];

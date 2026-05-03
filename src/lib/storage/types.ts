@@ -9,14 +9,14 @@ export const STORAGE_PROVIDER_IDS = [
 
 export type StorageProviderId = (typeof STORAGE_PROVIDER_IDS)[number];
 
-export const S3_COMPATIBLE_PROVIDER_IDS = ['s3', 'r2', 'b2', 'oci'] as const;
+const S3_COMPATIBLE_PROVIDER_IDS = ['s3', 'r2', 'b2', 'oci'] as const;
 
 export type S3CompatibleProviderId =
   (typeof S3_COMPATIBLE_PROVIDER_IDS)[number];
 
-export type StorageObjectKind = 'directory' | 'file';
+type StorageObjectKind = 'directory' | 'file';
 
-export type StorageChecksumAlgorithm =
+type StorageChecksumAlgorithm =
   | 'content-md5'
   | 'crc32'
   | 'crc32c'
@@ -24,7 +24,7 @@ export type StorageChecksumAlgorithm =
   | 'sha1'
   | 'sha256';
 
-export interface StorageChecksum {
+interface StorageChecksum {
   algorithm: StorageChecksumAlgorithm;
   value: string;
 }
@@ -56,12 +56,12 @@ export interface CheckStorageCredentialsResult {
   error?: StorageErrorInfo;
 }
 
-export interface ListStorageBucketsInput {
+interface ListStorageBucketsInput {
   limit?: number;
   cursor?: string;
 }
 
-export interface StorageBucket {
+interface StorageBucket {
   name: string;
   region?: string;
   createdAt?: Date;
@@ -114,7 +114,7 @@ export interface CreateMultipartUploadResult {
   uploadId: string;
 }
 
-export interface CompletedMultipartPart {
+interface CompletedMultipartPart {
   partNumber: number;
   etag: string;
   checksum?: StorageChecksum;

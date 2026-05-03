@@ -8,7 +8,7 @@ export function normalizePrefix(prefix: string) {
   return cleaned.endsWith('/') ? cleaned : `${cleaned}/`;
 }
 
-export function cleanRelativePath(path: string) {
+function cleanRelativePath(path: string) {
   const segments = path
     .replaceAll('\\', '/')
     .replace(/[\u0000-\u001f\u007f]/g, '')
@@ -37,11 +37,6 @@ export function parentPrefix(prefix: string) {
   return segments.length ? `${segments.join('/')}/` : '';
 }
 
-export function folderNameFromPath(path: string) {
-  const segments = path.split('/').filter(Boolean);
-  return segments[segments.length - 1] || path;
-}
-
 export function buildAddress(bucketName: string, prefix: string) {
   return `${bucketName}:/${normalizePrefix(prefix)}`;
 }
@@ -59,12 +54,4 @@ export function parseAddress(value: string, bucketName: string) {
   }
 
   return normalizePrefix(trimmed);
-}
-
-export function pathSegments(prefix: string) {
-  const segments = normalizePrefix(prefix).split('/').filter(Boolean);
-  return segments.map((segment, index) => ({
-    label: segment,
-    prefix: `${segments.slice(0, index + 1).join('/')}/`,
-  }));
 }

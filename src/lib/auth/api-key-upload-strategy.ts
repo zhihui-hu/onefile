@@ -17,7 +17,7 @@ type ApiKeyUploadStrategyRow = {
   compress_images: number | string | boolean | null;
 };
 
-export type ApiKeyUploadStrategy = {
+type ApiKeyUploadStrategy = {
   apiKeyId: number;
   userId: number;
   publicUploadUuid: string | null;
@@ -25,7 +25,7 @@ export type ApiKeyUploadStrategy = {
   compressImages: boolean;
 };
 
-export type PublicUploadApiKeyContext = {
+type PublicUploadApiKeyContext = {
   user: User;
   strategy: ApiKeyUploadStrategy;
 };

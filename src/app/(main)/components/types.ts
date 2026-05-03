@@ -168,11 +168,6 @@ export type UploadCompletePart = {
   etag?: string | null;
 };
 
-export type ApiEnvelope<T> = {
-  data: T;
-  error: null;
-};
-
 export type ApiFailure = {
   data: null;
   error: {

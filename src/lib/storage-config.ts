@@ -11,7 +11,7 @@ import { createStorageAdapter } from '@/lib/storage';
 import { type StorageAdapterConfig } from '@/lib/storage/types';
 import { and, eq } from 'drizzle-orm';
 
-export function parseExtraConfig(value: string | null | undefined) {
+function parseExtraConfig(value: string | null | undefined) {
   if (!value) {
     return {};
   }
@@ -25,7 +25,7 @@ export function parseExtraConfig(value: string | null | undefined) {
   }
 }
 
-export function secretHint(secret: string) {
+function secretHint(secret: string) {
   const visible = secret.slice(-4);
   return visible ? `****${visible}` : '****';
 }
@@ -122,7 +122,7 @@ export async function getStorageBucketForUser(
   return row;
 }
 
-export function adapterConfigFromAccount(
+function adapterConfigFromAccount(
   account: StorageAccount,
 ): StorageAdapterConfig {
   const extraConfig = parseExtraConfig(account.extraConfig);

@@ -5,7 +5,7 @@ import path from 'node:path';
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 const SLASHES = /\/+/g;
 
-export interface BuildObjectKeyOptions {
+interface BuildObjectKeyOptions {
   filename: string;
   currentPrefix?: string | null;
   relativePath?: string | null;
@@ -85,7 +85,7 @@ export function buildObjectKey(options: BuildObjectKeyOptions) {
   return segments.join('/');
 }
 
-export function withConflictPrefix(objectKey: string) {
+function withConflictPrefix(objectKey: string) {
   const segments = objectKey.split('/');
   const filename = segments.pop();
   if (!filename) {

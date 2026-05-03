@@ -15,7 +15,7 @@ function isExplicitTrue(value: string | null | undefined) {
   return value === '1' || value === 'true' || value === 'on';
 }
 
-export function isOneFileDebugEnabled() {
+function isOneFileDebugEnabled() {
   const envValue = debugEnvValue();
   if (isExplicitTrue(envValue)) return true;
   if (isExplicitFalse(envValue)) return false;
@@ -49,11 +49,6 @@ export function debugLog(label: string, data?: unknown) {
   }
 
   console.log(DEBUG_PREFIX, label, debugPayload(data));
-}
-
-export function debugWarn(label: string, data?: unknown) {
-  if (!isOneFileDebugEnabled()) return;
-  console.warn(DEBUG_PREFIX, label, debugPayload(data));
 }
 
 export function debugError(label: string, data?: unknown) {

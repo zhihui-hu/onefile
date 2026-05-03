@@ -32,8 +32,6 @@ const rawEnvSchema = z.object({
 
 const BUILD_PHASE_SECRET = 'onefile-build-time-placeholder-secret';
 
-export type AppEnv = ReturnType<typeof getEnv>;
-
 let cachedEnv: {
   nodeEnv: 'development' | 'test' | 'production';
   appOrigin?: string;

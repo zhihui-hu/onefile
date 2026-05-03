@@ -4,7 +4,7 @@ const MAX_LIST_LIMIT = 1000;
 
 type UnknownRecord = Record<string, unknown>;
 
-export function isRecord(value: unknown): value is UnknownRecord {
+function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
 }
 
@@ -26,24 +26,6 @@ export function getExtraString(
   const value = config.extraConfig?.[key];
   return typeof value === 'string' && value.trim().length > 0
     ? value.trim()
-    : undefined;
-}
-
-export function getExtraBoolean(
-  config: StorageAdapterConfig,
-  key: string,
-): boolean | undefined {
-  const value = config.extraConfig?.[key];
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-export function getExtraNumber(
-  config: StorageAdapterConfig,
-  key: string,
-): number | undefined {
-  const value = config.extraConfig?.[key];
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
     : undefined;
 }
 

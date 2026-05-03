@@ -12,7 +12,7 @@ import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { randomInt, randomUUID } from 'node:crypto';
 
-export const API_KEY_PREFIX = 'ofk';
+const API_KEY_PREFIX = 'ofk';
 const API_KEY_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const API_KEY_VISIBLE_SEGMENT_LENGTH = 10;
@@ -38,7 +38,7 @@ const IMPLIED_SCOPES: Record<ApiKeyScope, ApiKeyScope[]> = {
   'uploads:write': [],
 };
 
-export interface AuthContext {
+interface AuthContext {
   user: User;
   source: 'session' | 'api_key';
   key?: FileApiKey;
@@ -93,7 +93,7 @@ export function createPublicUploadUuid() {
   return randomUUID();
 }
 
-export function publicUploadUrl(uuid: string | null, requestOrigin?: string) {
+function publicUploadUrl(uuid: string | null, requestOrigin?: string) {
   if (!uuid) {
     return null;
   }
@@ -177,17 +177,6 @@ async function getApiKeyContext(
     .where(eq(fileApiKeys.id, apiKey.id));
 
   return { user, source: 'api_key', key: apiKey };
-}
-
-export async function getApiKeyAuthContext(
-  request: NextRequest,
-  requiredScopes: ApiKeyScope[] = [],
-) {
-  const auth = await getApiKeyContext(request, requiredScopes);
-  if (!auth) {
-    throw new HttpError(401, 'UNAUTHORIZED', 'API key is required');
-  }
-  return auth;
 }
 
 export async function getAuthContext(
