@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
@@ -21,6 +22,7 @@ import {
   DrawerTrigger,
 } from '@/components/ui/drawer';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 type ResponsiveDialogContextValue = {
@@ -106,6 +108,18 @@ function ResponsiveDialogContent({
         <div className="flex flex-1 flex-col overflow-hidden px-4 py-4">
           {children}
         </div>
+        {showCloseButton !== false && (
+          <DrawerClose asChild>
+            <Button
+              variant="ghost"
+              className="absolute top-2 right-2 z-10"
+              size="icon-sm"
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DrawerClose>
+        )}
       </DrawerContent>
     );
   }

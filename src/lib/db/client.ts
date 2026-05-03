@@ -8,7 +8,18 @@ import { schema } from './schema';
 
 declare global {
   var __onefileSqlite: Database.Database | undefined;
+  var __onefileSqliteSchemaVersion: number | undefined;
 }
+
+const DEV_SCHEMA_VERSION = 2;
+const FILE_API_TOKEN_RUNTIME_COLUMNS = [
+  'token_ciphertext',
+  'storage_bucket_id',
+  'compress_images',
+  'public_upload_uuid',
+  'public_upload_created_at',
+  'public_upload_revoked_at',
+] as const;
 
 const STORAGE_ACCOUNT_COLUMNS = [
   'id',
@@ -191,6 +202,61 @@ function migrateFileApiKeyImageCompress(sqlite: Database.Database) {
   sqlite.exec('ALTER TABLE onefile_file_api_tokens DROP COLUMN image_compress');
 }
 
+function addFileApiKeyColumnIfMissing(
+  sqlite: Database.Database,
+  columnName: string,
+  columnDefinition: string,
+) {
+  if (tableHasColumn(sqlite, 'onefile_file_api_tokens', columnName)) {
+    return;
+  }
+
+  sqlite.exec(
+    `ALTER TABLE onefile_file_api_tokens ADD COLUMN ${columnDefinition}`,
+  );
+}
+
+function migrateFileApiKeyUploadStrategy(sqlite: Database.Database) {
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'token_ciphertext',
+    'token_ciphertext TEXT',
+  );
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'storage_bucket_id',
+    'storage_bucket_id INTEGER REFERENCES onefile_storage_buckets(id) ON DELETE SET NULL',
+  );
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'compress_images',
+    'compress_images INTEGER NOT NULL DEFAULT 0',
+  );
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'public_upload_uuid',
+    'public_upload_uuid TEXT',
+  );
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'public_upload_created_at',
+    'public_upload_created_at TEXT',
+  );
+  addFileApiKeyColumnIfMissing(
+    sqlite,
+    'public_upload_revoked_at',
+    'public_upload_revoked_at TEXT',
+  );
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_onefile_file_api_tokens_storage_bucket_id
+      ON onefile_file_api_tokens(storage_bucket_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_onefile_file_api_tokens_public_upload_uuid
+      ON onefile_file_api_tokens(public_upload_uuid)
+      WHERE public_upload_uuid IS NOT NULL;
+  `);
+}
+
 function ensureSchema(sqlite: Database.Database) {
   const modelSql = fs.readFileSync(
     path.join(
@@ -207,6 +273,25 @@ function ensureSchema(sqlite: Database.Database) {
   migrateStorageBucketCorsStatus(sqlite);
   migrateStorageBucketDefaultFlag(sqlite);
   migrateFileApiKeyImageCompress(sqlite);
+  migrateFileApiKeyUploadStrategy(sqlite);
+}
+
+function fileApiTokenSchemaIsCurrent(sqlite: Database.Database) {
+  return FILE_API_TOKEN_RUNTIME_COLUMNS.every((columnName) =>
+    tableHasColumn(sqlite, 'onefile_file_api_tokens', columnName),
+  );
+}
+
+function ensureCachedSchema(sqlite: Database.Database) {
+  if (
+    globalThis.__onefileSqliteSchemaVersion === DEV_SCHEMA_VERSION &&
+    fileApiTokenSchemaIsCurrent(sqlite)
+  ) {
+    return;
+  }
+
+  ensureSchema(sqlite);
+  globalThis.__onefileSqliteSchemaVersion = DEV_SCHEMA_VERSION;
 }
 
 function createSqliteClient() {
@@ -219,6 +304,7 @@ function createSqliteClient() {
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('journal_mode = WAL');
   ensureSchema(sqlite);
+  globalThis.__onefileSqliteSchemaVersion = DEV_SCHEMA_VERSION;
   return sqlite;
 }
 
@@ -228,6 +314,7 @@ export function getSqlite() {
   }
 
   globalThis.__onefileSqlite ??= createSqliteClient();
+  ensureCachedSchema(globalThis.__onefileSqlite);
   return globalThis.__onefileSqlite;
 }
 

@@ -1,6 +1,9 @@
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
+import type { StorageAccount, StorageBucket } from './types';
+import type { ProviderId } from './types';
+
 export function formatBytes(value?: number | null) {
   if (value === null || value === undefined) return '-';
   if (value === 0) return '0 B';
@@ -40,4 +43,31 @@ export function providerLabel(provider?: string | null) {
   };
 
   return provider ? labels[provider] || provider : 'Object Storage';
+}
+
+const providerIds = [
+  's3',
+  'r2',
+  'b2',
+  'oci',
+  'aliyun_oss',
+  'tencent_cos',
+] as const satisfies readonly ProviderId[];
+
+export function isProviderId(value?: string | null): value is ProviderId {
+  return Boolean(value && (providerIds as readonly string[]).includes(value));
+}
+
+export function storageBucketDisplayName(
+  bucket: StorageBucket,
+  account?: StorageAccount | null,
+) {
+  const accountName =
+    bucket.account_name ||
+    account?.name ||
+    bucket.provider_account_id ||
+    account?.provider_account_id ||
+    '默认账号';
+
+  return `${accountName}(${bucket.name})`;
 }

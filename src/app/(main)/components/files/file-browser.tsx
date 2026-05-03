@@ -1,6 +1,10 @@
 'use client';
 
-import { deleteFiles, listFiles } from '@/app/(main)/components/api';
+import {
+  createFolder,
+  deleteFiles,
+  listFiles,
+} from '@/app/(main)/components/api';
 import { FileTable } from '@/app/(main)/components/files/file-table';
 import {
   buildAddress,
@@ -18,19 +22,31 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
 } from '@/components/ui/input-group';
+import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
+import { Spinner } from '@/components/ui/spinner';
+import { debugLog, debugLogLimited } from '@/lib/debug';
 import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { ArrowLeft, Database, RefreshCw, Search } from 'lucide-react';
 import {
+  ArrowLeft,
+  Database,
+  FolderPlus,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
+import {
+  type FormEvent,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -55,6 +71,8 @@ export function FileBrowser({
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [address, setAddress] = useState('');
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState('');
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
@@ -89,8 +107,37 @@ export function FileBrowser({
 
   const loadMore = useCallback(() => {
     if (!hasNextPage || isFetchingNextPage) return;
+    debugLog('file-browser:load-more', {
+      bucket_id: bucket?.id ?? null,
+      prefix,
+      search: deferredSearch.trim(),
+      page_count: filesQuery.data?.pages.length ?? 0,
+    });
     void fetchNextPage();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [
+    bucket?.id,
+    deferredSearch,
+    fetchNextPage,
+    filesQuery.data?.pages.length,
+    hasNextPage,
+    isFetchingNextPage,
+    prefix,
+  ]);
+
+  debugLogLimited('file-browser:render', {
+    bucket_id: bucket?.id ?? null,
+    prefix,
+    search,
+    deferred_search: deferredSearch,
+    status: filesQuery.status,
+    fetch_status: filesQuery.fetchStatus,
+    is_fetching: filesQuery.isFetching,
+    is_loading: filesQuery.isLoading,
+    is_fetching_next_page: filesQuery.isFetchingNextPage,
+    page_count: filesQuery.data?.pages.length ?? 0,
+    items_count: items.length,
+    has_next_page: filesQuery.hasNextPage,
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (items: FileItem[]) =>
@@ -108,6 +155,25 @@ export function FileBrowser({
       toast.error(error instanceof Error ? error.message : '删除失败'),
   });
 
+  const createFolderMutation = useMutation({
+    mutationFn: () =>
+      createFolder({
+        bucket_id: bucket!.id,
+        prefix,
+        name: folderName.trim(),
+      }),
+    onSuccess: async () => {
+      toast.success('文件夹已创建');
+      setCreateFolderOpen(false);
+      setFolderName('');
+      await queryClient.invalidateQueries({
+        queryKey: ['onefile', 'files', bucket?.id],
+      });
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : '创建文件夹失败'),
+  });
+
   const refresh = () => {
     void filesQuery.refetch();
   };
@@ -120,6 +186,12 @@ export function FileBrowser({
   const submitAddress = () => {
     if (!bucket) return;
     onPrefixChange(parseAddress(address, bucket.name));
+  };
+
+  const submitCreateFolder = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!folderName.trim() || createFolderMutation.isPending) return;
+    createFolderMutation.mutate();
   };
 
   if (!bucket) {
@@ -218,10 +290,68 @@ export function FileBrowser({
         hasMore={filesQuery.hasNextPage}
         loadingMore={filesQuery.isFetchingNextPage}
         selectionResetKey={[bucket.id, prefix, deferredSearch.trim()].join('|')}
+        refreshing={filesQuery.isFetching}
+        creatingFolder={createFolderMutation.isPending}
         onLoadMore={loadMore}
+        onRefresh={refresh}
+        onCreateFolder={() => {
+          setFolderName('');
+          setCreateFolderOpen(true);
+        }}
         onOpenFolder={openFolder}
         onDeleteFiles={(items) => deleteMutation.mutate(items)}
       />
+
+      <ResponsiveDialog
+        open={createFolderOpen}
+        onOpenChange={(nextOpen) => {
+          if (createFolderMutation.isPending) return;
+          setCreateFolderOpen(nextOpen);
+          if (!nextOpen) {
+            setFolderName('');
+          }
+        }}
+      >
+        <ResponsiveDialog.Content
+          className="sm:max-w-md"
+          drawerClassName="max-h-[92vh]"
+        >
+          <form className="flex flex-col gap-4" onSubmit={submitCreateFolder}>
+            <ResponsiveDialog.Header className="p-0 text-left">
+              <ResponsiveDialog.Title>新增文件夹</ResponsiveDialog.Title>
+              <ResponsiveDialog.Description>
+                在当前目录创建一个文件夹。
+              </ResponsiveDialog.Description>
+            </ResponsiveDialog.Header>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="folder-name">文件夹名称</FieldLabel>
+                <Input
+                  id="folder-name"
+                  value={folderName}
+                  onChange={(event) => setFolderName(event.target.value)}
+                  autoFocus
+                  maxLength={255}
+                  placeholder="新建文件夹"
+                />
+              </Field>
+            </FieldGroup>
+            <ResponsiveDialog.Footer className="p-2">
+              <Button
+                type="submit"
+                disabled={!folderName.trim() || createFolderMutation.isPending}
+              >
+                {createFolderMutation.isPending ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <FolderPlus data-icon="inline-start" />
+                )}
+                创建
+              </Button>
+            </ResponsiveDialog.Footer>
+          </form>
+        </ResponsiveDialog.Content>
+      </ResponsiveDialog>
     </section>
   );
 }

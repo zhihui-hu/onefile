@@ -42,10 +42,12 @@ import {
   FileText,
   FileVideo,
   Folder,
+  FolderPlus,
   MoreHorizontal,
+  RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 const VIDEO_FILE_EXTENSIONS = [
   '3g2',
@@ -216,28 +218,22 @@ export function NameCell({
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
-  useEffect(() => {
+  const checkOverflow = () => {
     const node = labelRef.current;
-    if (!node) return;
-
-    const updateOverflow = () => {
-      setIsOverflowing(node.scrollWidth > node.clientWidth + 1);
-    };
-
-    updateOverflow();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateOverflow);
-      return () => window.removeEventListener('resize', updateOverflow);
+    if (node) {
+      const nextOverflowing = node.scrollWidth > node.clientWidth + 1;
+      setIsOverflowing((current) =>
+        current === nextOverflowing ? current : nextOverflowing,
+      );
     }
-
-    const observer = new ResizeObserver(updateOverflow);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [label]);
+  };
 
   const labelNode = (
-    <span ref={labelRef} className="block min-w-0 truncate leading-tight">
+    <span
+      ref={labelRef}
+      className="block min-w-0 truncate leading-tight"
+      onPointerEnter={checkOverflow}
+    >
       {label}
     </span>
   );
@@ -405,6 +401,39 @@ export function FileContextMenuContent({
           <Trash2 />
           删除
         </ContextMenuItem>
+      </ContextMenuGroup>
+    </ContextMenuContent>
+  );
+}
+
+export function DirectoryContextMenuContent({
+  refreshing,
+  creatingFolder,
+  onRefresh,
+  onCreateFolder,
+}: {
+  refreshing?: boolean;
+  creatingFolder?: boolean;
+  onRefresh?: () => void;
+  onCreateFolder?: () => void;
+}) {
+  if (!onRefresh && !onCreateFolder) return null;
+
+  return (
+    <ContextMenuContent className="w-40">
+      <ContextMenuGroup>
+        {onRefresh && (
+          <ContextMenuItem disabled={refreshing} onSelect={onRefresh}>
+            <RefreshCw className={refreshing ? 'animate-spin' : undefined} />
+            刷新
+          </ContextMenuItem>
+        )}
+        {onCreateFolder && (
+          <ContextMenuItem disabled={creatingFolder} onSelect={onCreateFolder}>
+            <FolderPlus />
+            新增文件夹
+          </ContextMenuItem>
+        )}
       </ContextMenuGroup>
     </ContextMenuContent>
   );

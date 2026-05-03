@@ -1,6 +1,6 @@
 import { HttpError } from '@/lib/api/response';
 import { getCurrentUser } from '@/lib/auth/session';
-import { randomToken, sha256 } from '@/lib/crypto';
+import { decryptText, sha256 } from '@/lib/crypto';
 import { db } from '@/lib/db/client';
 import {
   type FileApiKey,
@@ -10,8 +10,13 @@ import {
 } from '@/lib/db/schema';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
+import { randomInt, randomUUID } from 'node:crypto';
 
 export const API_KEY_PREFIX = 'ofk';
+const API_KEY_ALPHABET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const API_KEY_VISIBLE_SEGMENT_LENGTH = 10;
+const API_KEY_SECRET_SEGMENT_LENGTH = 48;
 
 export type ApiKeyScope =
   | 'files:read'
@@ -57,6 +62,14 @@ export function serializeScopes(scopes: ApiKeyScope[]) {
   return JSON.stringify(Array.from(new Set(scopes)));
 }
 
+function randomApiKeySegment(length: number) {
+  let segment = '';
+  for (let i = 0; i < length; i += 1) {
+    segment += API_KEY_ALPHABET[randomInt(API_KEY_ALPHABET.length)];
+  }
+  return segment;
+}
+
 function expandScopes(scopes: ApiKeyScope[]) {
   const expanded = new Set(scopes);
   for (const scope of scopes) {
@@ -68,12 +81,33 @@ function expandScopes(scopes: ApiKeyScope[]) {
 }
 
 export function createRawApiKey() {
-  const prefix = randomToken(6);
-  const secret = randomToken(32);
+  const prefix = randomApiKeySegment(API_KEY_VISIBLE_SEGMENT_LENGTH);
+  const secret = randomApiKeySegment(API_KEY_SECRET_SEGMENT_LENGTH);
   return {
     rawKey: `${API_KEY_PREFIX}_${prefix}_${secret}`,
     keyPrefix: `${API_KEY_PREFIX}_${prefix}`,
   };
+}
+
+export function createPublicUploadUuid() {
+  return randomUUID();
+}
+
+export function publicUploadUrl(uuid: string | null, requestOrigin?: string) {
+  if (!uuid) {
+    return null;
+  }
+
+  const path = `/${uuid}`;
+  if (!requestOrigin) {
+    return path;
+  }
+
+  try {
+    return new URL(path, requestOrigin).toString();
+  } catch {
+    return path;
+  }
 }
 
 function bearerKey(request: NextRequest) {
@@ -172,13 +206,40 @@ export async function getAuthContext(
   return auth;
 }
 
-export function publicApiKey(key: FileApiKey) {
+function decryptedApiKey(key: FileApiKey) {
+  if (!key.tokenCiphertext) {
+    return null;
+  }
+
+  try {
+    return decryptText(key.tokenCiphertext);
+  } catch {
+    return null;
+  }
+}
+
+export function publicApiKey(key: FileApiKey, requestOrigin?: string) {
+  const publicUploadUuid = key.publicUploadRevokedAt
+    ? null
+    : key.publicUploadUuid;
+  const fullKey = decryptedApiKey(key);
+
   return {
     id: key.id,
     name: key.name,
+    key: fullKey,
+    raw_key: fullKey,
+    plain_key: fullKey,
+    has_full_key: Boolean(fullKey),
     key_prefix: key.tokenPrefix,
     description: key.description,
     scopes: parseScopes(key.scopes),
+    bucket_id: key.storageBucketId,
+    compress_images: key.compressImages === 1,
+    public_upload_uuid: publicUploadUuid,
+    public_upload_url: publicUploadUrl(publicUploadUuid, requestOrigin),
+    public_upload_created_at: key.publicUploadCreatedAt,
+    public_upload_revoked_at: key.publicUploadRevokedAt,
     status: key.status,
     last_used_at: key.lastUsedAt,
     last_used_ip: key.lastUsedIp,

@@ -1,9 +1,12 @@
 'use client';
 
-import { providerLabel } from '@/app/(main)/components/format';
+import {
+  isProviderId,
+  providerLabel,
+  storageBucketDisplayName,
+} from '@/app/(main)/components/format';
 import { providerIconUrl } from '@/app/(main)/components/storage/storage-account-form-dialog';
 import type {
-  ProviderId,
   StorageAccount,
   StorageBucket,
 } from '@/app/(main)/components/types';
@@ -26,6 +29,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@/components/ui/input-group';
+import { OverflowTooltipText } from '@/components/ui/overflow-tooltip-text';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -34,10 +38,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { debugLog, debugLogLimited } from '@/lib/debug';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Database, Plus, RefreshCw, Search } from 'lucide-react';
 import Image from 'next/image';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 function accountId(bucket: StorageBucket) {
   return bucket.storage_account_id ?? bucket.storageAccountId ?? '';
@@ -45,58 +50,31 @@ function accountId(bucket: StorageBucket) {
 
 function BucketItem({
   bucket,
+  label,
   selected,
   onSelect,
 }: {
   bucket: StorageBucket;
+  label: string;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [overflowed, setOverflowed] = useState(false);
-
-  const checkOverflow = useCallback((node: HTMLSpanElement | null) => {
-    textRef.current = node;
-    if (node) {
-      setOverflowed(node.scrollWidth > node.clientWidth);
-    }
-  }, []);
-
   return (
-    <Tooltip open={overflowed ? undefined : false}>
-      <TooltipTrigger asChild>
-        <Button
-          variant={selected ? 'secondary' : 'ghost'}
-          className="h-7 w-full max-w-full min-w-0 justify-start overflow-hidden px-1.5 text-xs font-normal text-muted-foreground cursor-pointer"
-          onClick={onSelect}
-        >
-          <Database data-icon="inline-start" />
-          <span
-            ref={checkOverflow}
-            className="block min-w-0 flex-1 truncate text-left"
-          >
-            {bucket.name}
-          </span>
-        </Button>
-      </TooltipTrigger>
-      {overflowed && (
-        <TooltipContent side="right">{bucket.name}</TooltipContent>
-      )}
-    </Tooltip>
+    <Button
+      variant={selected ? 'secondary' : 'ghost'}
+      className="h-7 w-full max-w-full min-w-0 justify-start overflow-hidden px-1.5 text-xs font-normal text-muted-foreground cursor-pointer"
+      onClick={onSelect}
+    >
+      <Database data-icon="inline-start" />
+      <OverflowTooltipText
+        className="flex-1 text-left"
+        side="right"
+        tooltip={label}
+      >
+        {bucket.name}
+      </OverflowTooltipText>
+    </Button>
   );
-}
-
-const providerIds = [
-  's3',
-  'r2',
-  'b2',
-  'oci',
-  'aliyun_oss',
-  'tencent_cos',
-] as const satisfies readonly ProviderId[];
-
-function isProviderId(value: string): value is ProviderId {
-  return (providerIds as readonly string[]).includes(value);
 }
 
 export function BucketSidebar({
@@ -184,6 +162,16 @@ export function BucketSidebar({
     }, []);
   }, [accountMap, buckets, search]);
 
+  debugLogLimited('bucket-sidebar:render', {
+    accounts_count: accounts.length,
+    buckets_count: buckets.length,
+    groups_count: groups.length,
+    selected_bucket_id: selectedBucket?.id ?? null,
+    loading,
+    refreshing,
+    search,
+  });
+
   return (
     <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-muted/20">
       <div className="flex items-center gap-1.5 border-b p-2">
@@ -200,7 +188,10 @@ export function BucketSidebar({
             <InputGroupButton
               size="icon-xs"
               variant="ghost"
-              onClick={onRefresh}
+              onClick={() => {
+                debugLog('bucket-sidebar:refresh-click');
+                onRefresh();
+              }}
               className="cursor-pointer"
             >
               <RefreshCw className={cn(refreshing && 'animate-spin')} />
@@ -288,6 +279,10 @@ export function BucketSidebar({
                         <BucketItem
                           key={bucket.id}
                           bucket={bucket}
+                          label={storageBucketDisplayName(
+                            bucket,
+                            accountMap.get(String(accountId(bucket))),
+                          )}
                           selected={
                             String(selectedBucket?.id) === String(bucket.id)
                           }

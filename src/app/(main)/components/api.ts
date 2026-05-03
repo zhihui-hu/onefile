@@ -1,11 +1,15 @@
+import { debugError, debugLog, errorDebugData } from '@/lib/debug';
 import { cleanDisplayText } from '@/lib/utils';
 
 import type {
   ApiFailure,
   CurrentUser,
   FileApiKey,
+  FileApiKeyLinkPayload,
+  FileApiKeyPayload,
   FileItem,
   FileListResult,
+  PublicUploadResult,
   StorageAccount,
   StorageBucket,
   UploadCompletePart,
@@ -201,6 +205,10 @@ async function parseDownloadResponse(
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const startedAt = performance.now();
+  const method = init.method ?? 'GET';
+  debugLog('client:request:start', { method, path });
+
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
 
@@ -213,13 +221,29 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'include',
-    headers,
-  });
-
-  return parseResponse<T>(response);
+  try {
+    const response = await fetch(path, {
+      ...init,
+      credentials: 'include',
+      headers,
+    });
+    const data = await parseResponse<T>(response);
+    debugLog('client:request:end', {
+      method,
+      path,
+      status: response.status,
+      duration_ms: Math.round(performance.now() - startedAt),
+    });
+    return data;
+  } catch (error) {
+    debugError('client:request:error', {
+      method,
+      path,
+      duration_ms: Math.round(performance.now() - startedAt),
+      error: errorDebugData(error),
+    });
+    throw error;
+  }
 }
 
 async function jsonRequest<T>(path: string, method: string, body?: JsonObject) {
@@ -378,6 +402,18 @@ export async function deleteFiles(payload: {
   return jsonRequest<unknown>('/api/files', 'DELETE', payload);
 }
 
+export async function createFolder(payload: {
+  bucket_id: number | string;
+  prefix?: string;
+  name: string;
+}) {
+  return jsonRequest<{ created: boolean; object_key: string }>(
+    '/api/files/folders',
+    'POST',
+    payload,
+  );
+}
+
 export async function createUpload(payload: UploadInitPayload) {
   return jsonRequest<UploadInitResult>('/api/uploads', 'POST', payload);
 }
@@ -392,6 +428,14 @@ export function directUpload(
   signal: AbortSignal,
   onProgress: (loaded: number, total: number) => void,
 ) {
+  const startedAt = performance.now();
+  debugLog('client:direct-upload:start', {
+    bucket_id: payload.bucket_id,
+    filename: payload.file.name,
+    size: payload.file.size,
+    type: payload.file.type,
+  });
+
   const formData = new FormData();
   formData.set('file', payload.file);
   formData.set('bucket_id', String(payload.bucket_id));
@@ -417,14 +461,33 @@ export function directUpload(
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded, event.total);
     };
-    xhr.onerror = () => reject(new Error('服务端上传失败'));
+    xhr.onerror = () => {
+      debugError('client:direct-upload:error', {
+        duration_ms: Math.round(performance.now() - startedAt),
+        status: xhr.status,
+        status_text: xhr.statusText,
+      });
+      reject(new Error('服务端上传失败'));
+    };
     xhr.onabort = () =>
       reject(new DOMException('Upload aborted', 'AbortError'));
     xhr.onload = async () => {
       signal.removeEventListener('abort', abort);
       try {
-        resolve(await parseResponse<UploadDirectResult>(xhrResponse(xhr)));
+        const data = await parseResponse<UploadDirectResult>(xhrResponse(xhr));
+        debugLog('client:direct-upload:end', {
+          duration_ms: Math.round(performance.now() - startedAt),
+          status: xhr.status,
+          object_key: data.object_key,
+          compressed: data.compressed,
+        });
+        resolve(data);
       } catch (error) {
+        debugError('client:direct-upload:error', {
+          duration_ms: Math.round(performance.now() - startedAt),
+          status: xhr.status,
+          error: errorDebugData(error),
+        });
         reject(error);
       }
     };
@@ -524,7 +587,7 @@ export async function listFileApiKeys() {
   return asItems(data);
 }
 
-export async function createFileApiKey(payload: JsonObject) {
+export async function createFileApiKey(payload: FileApiKeyPayload) {
   const data = await jsonRequest<MaybeCreatedFileApiKey>(
     '/api/file-api-keys',
     'POST',
@@ -535,7 +598,7 @@ export async function createFileApiKey(payload: JsonObject) {
 
 export async function updateFileApiKey(
   id: number | string,
-  payload: JsonObject,
+  payload: FileApiKeyPayload,
 ) {
   const data = await jsonRequest<MaybeFileApiKey>(
     `/api/file-api-keys/${id}`,
@@ -547,6 +610,92 @@ export async function updateFileApiKey(
 
 export async function deleteFileApiKey(id: number | string) {
   return jsonRequest<unknown>(`/api/file-api-keys/${id}`, 'DELETE');
+}
+
+export async function updateFileApiKeyLink(
+  id: number | string,
+  payload: FileApiKeyLinkPayload,
+) {
+  const data = await jsonRequest<MaybeFileApiKey>(
+    `/api/file-api-keys/${id}`,
+    'PATCH',
+    { public_upload: payload.action },
+  );
+  return asFileApiKey(data);
+}
+
+export function publicUpload(
+  uuid: string,
+  file: File,
+  signal: AbortSignal,
+  onProgress: (loaded: number, total: number) => void,
+) {
+  const startedAt = performance.now();
+  debugLog('client:public-upload:start', {
+    uuid,
+    filename: file.name,
+    size: file.size,
+    type: file.type,
+  });
+
+  const formData = new FormData();
+  formData.set('file', file);
+
+  return new Promise<PublicUploadResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    const abort = () => {
+      xhr.abort();
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    };
+
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+
+    signal.addEventListener('abort', abort, { once: true });
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total);
+    };
+    xhr.onerror = () => {
+      debugError('client:public-upload:error', {
+        uuid,
+        duration_ms: Math.round(performance.now() - startedAt),
+        status: xhr.status,
+        status_text: xhr.statusText,
+      });
+      reject(new Error('公开上传失败'));
+    };
+    xhr.onabort = () =>
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    xhr.onload = async () => {
+      signal.removeEventListener('abort', abort);
+      try {
+        const data = await parseResponse<PublicUploadResult>(xhrResponse(xhr));
+        debugLog('client:public-upload:end', {
+          uuid,
+          duration_ms: Math.round(performance.now() - startedAt),
+          status: xhr.status,
+          object_key: data.object_key,
+          compressed: data.compressed,
+        });
+        resolve(data);
+      } catch (error) {
+        debugError('client:public-upload:error', {
+          uuid,
+          duration_ms: Math.round(performance.now() - startedAt),
+          status: xhr.status,
+          error: errorDebugData(error),
+        });
+        reject(error);
+      }
+    };
+
+    xhr.open('POST', `/api/public-uploads/${encodeURIComponent(uuid)}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.send(formData);
+  });
 }
 
 export function getSignedUrl(result: {

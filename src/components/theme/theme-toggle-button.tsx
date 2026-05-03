@@ -137,7 +137,7 @@ export function ThemeToggleButton({
       <ThemeToggleViewTransitionStyles />
       <Button
         aria-label={label}
-        className={cn('shrink-0', className)}
+        className={cn('shrink-0 cursor-pointer', className)}
         onClick={handleToggle}
         size="icon-sm"
         title={label}

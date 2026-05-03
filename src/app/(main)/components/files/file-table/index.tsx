@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  DirectoryContextMenuContent,
   FileContextMenuContent,
   FileDropdownMenu,
   NameCell,
@@ -29,6 +30,7 @@ import {
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { debugLog, debugLogLimited } from '@/lib/debug';
 import { cn } from '@/lib/utils';
 import {
   type ColumnDef,
@@ -56,7 +58,11 @@ export function FileTable({
   hasMore = false,
   loadingMore = false,
   selectionResetKey,
+  refreshing,
+  creatingFolder,
   onLoadMore,
+  onRefresh,
+  onCreateFolder,
   onOpenFolder,
   onDeleteFiles,
 }: {
@@ -68,7 +74,11 @@ export function FileTable({
   hasMore?: boolean;
   loadingMore?: boolean;
   selectionResetKey?: string;
+  refreshing?: boolean;
+  creatingFolder?: boolean;
   onLoadMore?: () => void;
+  onRefresh?: () => void;
+  onCreateFolder?: () => void;
   onOpenFolder: (item: FileItem) => void;
   onDeleteFiles: (items: FileItem[]) => void;
 }) {
@@ -232,8 +242,30 @@ export function FileTable({
     .rows.map((row) => row.original)
     .filter((item) => item.kind === 'file');
   const visibleColumnCount = table.getVisibleFlatColumns().length;
+  const directoryMenuEnabled =
+    selectedFiles.length === 0 && Boolean(onRefresh || onCreateFolder);
+
+  debugLogLimited('file-table:render', {
+    bucket_id: bucket?.id ?? null,
+    items_count: items.length,
+    loading,
+    loading_more: loadingMore,
+    has_more: hasMore,
+    selection_reset_key: selectionResetKey,
+    selected_count: selectedFiles.length,
+    row_count: table.getRowModel().rows.length,
+  });
 
   useEffect(() => {
+    debugLog('file-table:load-more-effect', {
+      bucket_id: bucket?.id ?? null,
+      items_count: items.length,
+      loading,
+      loading_more: loadingMore,
+      has_more: hasMore,
+      has_on_load_more: Boolean(onLoadMore),
+    });
+
     if (!hasMore || loading || loadingMore || !onLoadMore) return;
 
     const target = loadMoreRef.current;
@@ -247,6 +279,10 @@ export function FileTable({
       const requestLoadMore = () => {
         if (loadMoreRequestedRef.current) return;
         loadMoreRequestedRef.current = true;
+        debugLog('file-table:load-more:fallback-trigger', {
+          bucket_id: bucket?.id ?? null,
+          items_count: items.length,
+        });
         onLoadMore();
       };
 
@@ -269,6 +305,21 @@ export function FileTable({
         if (entry?.isIntersecting) {
           if (loadMoreRequestedRef.current) return;
           loadMoreRequestedRef.current = true;
+          debugLog('file-table:load-more:intersection', {
+            bucket_id: bucket?.id ?? null,
+            items_count: items.length,
+            intersection_ratio: entry.intersectionRatio,
+            root_bounds: entry.rootBounds
+              ? {
+                  height: entry.rootBounds.height,
+                  width: entry.rootBounds.width,
+                }
+              : null,
+            bounding_rect: {
+              height: entry.boundingClientRect.height,
+              top: entry.boundingClientRect.top,
+            },
+          });
           onLoadMore();
         }
       },
@@ -280,7 +331,7 @@ export function FileTable({
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, onLoadMore]);
+  }, [bucket?.id, hasMore, items.length, loading, loadingMore, onLoadMore]);
 
   if (error) {
     return (
@@ -297,7 +348,7 @@ export function FileTable({
   }
 
   if (!items.length && !hasMore && !loadingMore) {
-    return (
+    const emptyState = (
       <Empty className="h-full min-h-72">
         <EmptyHeader>
           <EmptyMedia variant="icon">
@@ -307,6 +358,24 @@ export function FileTable({
           <EmptyDescription>上传文件后会自动刷新当前目录。</EmptyDescription>
         </EmptyHeader>
       </Empty>
+    );
+
+    if (!directoryMenuEnabled) {
+      return emptyState;
+    }
+
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="h-full min-h-72">{emptyState}</div>
+        </ContextMenuTrigger>
+        <DirectoryContextMenuContent
+          refreshing={refreshing}
+          creatingFolder={creatingFolder}
+          onRefresh={onRefresh}
+          onCreateFolder={onCreateFolder}
+        />
+      </ContextMenu>
     );
   }
 
@@ -337,8 +406,11 @@ export function FileTable({
             ))}
           </thead>
         </table>
-        <div ref={scrollRootRef} className="min-h-0 flex-1 overflow-y-auto">
-          <table className="min-w-[840px] w-full table-fixed text-xs sm:text-sm">
+        <div
+          ref={scrollRootRef}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
+          <table className="min-w-[840px] w-full shrink-0 table-fixed text-xs sm:text-sm">
             <tbody className="[&_tr:last-child]:border-0">
               {table.getRowModel().rows.map((row) => {
                 const item = row.original;
@@ -401,6 +473,19 @@ export function FileTable({
               )}
             </tbody>
           </table>
+          {directoryMenuEnabled && (
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div className="min-h-24 flex-1" aria-label="目录空白区域" />
+              </ContextMenuTrigger>
+              <DirectoryContextMenuContent
+                refreshing={refreshing}
+                creatingFolder={creatingFolder}
+                onRefresh={onRefresh}
+                onCreateFolder={onCreateFolder}
+              />
+            </ContextMenu>
+          )}
         </div>
         {selectedFiles.length > 0 && (
           <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">

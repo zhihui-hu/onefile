@@ -22,9 +22,10 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import { debugLog, debugLogLimited } from '@/lib/debug';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Database, FileUp, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const FILE_LOCATION_STORAGE_KEY = 'onefile:file-location:v1';
 
@@ -115,6 +116,7 @@ export function OneFileHome() {
     enabled: Boolean(meQuery.data),
     retry: false,
   });
+  const refetchBuckets = bucketsQuery.refetch;
 
   const accounts = useMemo(
     () => accountsQuery.data || [],
@@ -129,21 +131,45 @@ export function OneFileHome() {
   const selectedPrefix = selectedBucket
     ? bucketPrefixes[String(selectedBucket.id)] || ''
     : '';
+  const storageDialogOpen = accountsOpen || createAccountOpen;
+  const storageQueriesReady = accountsQuery.isSuccess && bucketsQuery.isSuccess;
+
+  debugLogLimited('home:render', {
+    me_status: meQuery.status,
+    accounts_status: accountsQuery.status,
+    buckets_status: bucketsQuery.status,
+    accounts_count: accounts.length,
+    buckets_count: buckets.length,
+    selected_bucket_id: selectedBucketId,
+    selected_prefix: selectedPrefix,
+    location_ready: locationReady,
+  });
 
   useEffect(() => {
+    debugLog('home:restore-location:start');
     const stored = readStoredFileLocation();
+    debugLog('home:restore-location:end', {
+      selected_bucket_id: stored.selectedBucketId,
+      selected_address: stored.selectedAddress,
+      prefix_count: Object.keys(stored.prefixes).length,
+    });
     setSelectedBucketId(stored.selectedBucketId);
     setBucketPrefixes(stored.prefixes);
     setLocationReady(true);
   }, []);
 
   useEffect(() => {
-    if (!locationReady) {
+    if (!locationReady || !bucketsQuery.isSuccess) {
       return;
     }
 
     if (!buckets.length) {
-      setSelectedBucketId(null);
+      if (selectedBucketId !== null) {
+        debugLog('home:bucket-selection:empty', {
+          previous_bucket_id: selectedBucketId,
+        });
+        setSelectedBucketId(null);
+      }
       return;
     }
 
@@ -155,14 +181,26 @@ export function OneFileHome() {
     }
 
     const next = buckets[0];
+    debugLog('home:bucket-selection:fallback', {
+      previous_bucket_id: selectedBucketId,
+      next_bucket_id: next.id,
+      next_bucket_name: next.name,
+    });
     setSelectedBucketId(String(next.id));
-  }, [buckets, locationReady, selectedBucketId]);
+  }, [buckets, bucketsQuery.isSuccess, locationReady, selectedBucketId]);
 
   useEffect(() => {
-    if (!locationReady) {
+    if (!locationReady || !storageQueriesReady) {
       return;
     }
 
+    debugLog('home:persist-location', {
+      selected_bucket_id: selectedBucketId,
+      selected_address: selectedBucket
+        ? buildAddress(selectedBucket.name, selectedPrefix)
+        : null,
+      prefix_count: Object.keys(bucketPrefixes).length,
+    });
     writeStoredFileLocation({
       selectedBucketId,
       selectedAddress: selectedBucket
@@ -176,17 +214,51 @@ export function OneFileHome() {
     selectedBucket,
     selectedBucketId,
     selectedPrefix,
+    storageQueriesReady,
   ]);
 
-  const updateSelectedPrefix = (nextPrefix: string) => {
-    if (!selectedBucket) return;
+  const updateSelectedPrefix = useCallback(
+    (nextPrefix: string) => {
+      if (!selectedBucket) return;
 
-    const bucketId = String(selectedBucket.id);
-    setBucketPrefixes((current) => ({
-      ...current,
-      [bucketId]: normalizePrefix(nextPrefix),
-    }));
-  };
+      const bucketId = String(selectedBucket.id);
+      const normalizedPrefix = normalizePrefix(nextPrefix);
+      debugLog('home:update-prefix', {
+        bucket_id: bucketId,
+        next_prefix: normalizedPrefix,
+      });
+      setBucketPrefixes((current) =>
+        current[bucketId] === normalizedPrefix
+          ? current
+          : {
+              ...current,
+              [bucketId]: normalizedPrefix,
+            },
+      );
+    },
+    [selectedBucket],
+  );
+
+  const selectBucket = useCallback((bucketId: number | string) => {
+    const nextBucketId = String(bucketId);
+    debugLog('home:select-bucket', {
+      bucket_id: nextBucketId,
+      reset_prefix: true,
+    });
+    setSelectedBucketId(nextBucketId);
+    setBucketPrefixes((current) =>
+      current[nextBucketId]
+        ? {
+            ...current,
+            [nextBucketId]: '',
+          }
+        : current,
+    );
+  }, []);
+
+  const refreshBuckets = useCallback(() => {
+    void refetchBuckets();
+  }, [refetchBuckets]);
 
   if (meQuery.isLoading) {
     return (
@@ -202,7 +274,7 @@ export function OneFileHome() {
   }
 
   const loadingBuckets =
-    !locationReady || accountsQuery.isLoading || bucketsQuery.isLoading;
+    !locationReady || accountsQuery.isPending || bucketsQuery.isPending;
   const loadError =
     accountsQuery.error instanceof Error
       ? accountsQuery.error.message
@@ -215,6 +287,23 @@ export function OneFileHome() {
     accounts.length === 0 &&
     buckets.length === 0;
   const isAdmin = meQuery.data.role === 'admin';
+
+  if (loadingBuckets) {
+    return (
+      <main className="flex h-[calc(100vh-7rem)] flex-col gap-3 overflow-hidden p-3">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="min-h-0 flex-1" />
+        {storageDialogOpen && (
+          <StorageAccountDialog
+            open={accountsOpen}
+            onOpenChange={setAccountsOpen}
+            createOpen={createAccountOpen}
+            onCreateOpenChange={setCreateAccountOpen}
+          />
+        )}
+      </main>
+    );
+  }
 
   if (emptyStorage) {
     return (
@@ -247,13 +336,15 @@ export function OneFileHome() {
           )}
         </Empty>
 
-        <StorageAccountDialog
-          open={accountsOpen}
-          onOpenChange={setAccountsOpen}
-          createOpen={createAccountOpen}
-          onCreateOpenChange={setCreateAccountOpen}
-        />
-        {isAdmin && (
+        {storageDialogOpen && (
+          <StorageAccountDialog
+            open={accountsOpen}
+            onOpenChange={setAccountsOpen}
+            createOpen={createAccountOpen}
+            onCreateOpenChange={setCreateAccountOpen}
+          />
+        )}
+        {isAdmin && backupOpen && (
           <SqlBackupDialog
             open={backupOpen}
             onOpenChange={setBackupOpen}
@@ -281,9 +372,9 @@ export function OneFileHome() {
           selectedBucket={selectedBucket}
           loading={loadingBuckets}
           refreshing={bucketsQuery.isFetching}
-          onRefresh={() => void bucketsQuery.refetch()}
+          onRefresh={refreshBuckets}
           onCreateAccount={() => setCreateAccountOpen(true)}
-          onSelectBucket={(bucket) => setSelectedBucketId(String(bucket.id))}
+          onSelectBucket={(bucket) => selectBucket(bucket.id)}
         />
         <FileBrowser
           bucket={selectedBucket}
@@ -293,12 +384,14 @@ export function OneFileHome() {
         />
       </div>
 
-      <StorageAccountDialog
-        open={accountsOpen}
-        onOpenChange={setAccountsOpen}
-        createOpen={createAccountOpen}
-        onCreateOpenChange={setCreateAccountOpen}
-      />
+      {storageDialogOpen && (
+        <StorageAccountDialog
+          open={accountsOpen}
+          onOpenChange={setAccountsOpen}
+          createOpen={createAccountOpen}
+          onCreateOpenChange={setCreateAccountOpen}
+        />
+      )}
     </main>
   );
 }

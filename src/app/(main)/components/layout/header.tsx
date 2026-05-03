@@ -70,6 +70,7 @@ export function OneFileHeader() {
       <div className="flex h-14 items-center gap-3 px-4">
         <Link
           href="/"
+          prefetch={false}
           className="flex min-w-0 items-center cursor-pointer gap-2"
         >
           <Image
@@ -86,8 +87,13 @@ export function OneFileHeader() {
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggleButton />
 
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/api-docs" target="_blank" rel="noreferrer">
+          <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
+            <Link
+              href="/api-docs"
+              target="_blank"
+              rel="noreferrer"
+              prefetch={false}
+            >
               <BookOpenText data-icon="inline-start" />
               API 文档
             </Link>
@@ -98,7 +104,12 @@ export function OneFileHeader() {
           ) : user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="用户菜单">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="cursor-pointer"
+                  aria-label="用户菜单"
+                >
                   <Avatar size="default">
                     {user.avatar_url && (
                       <Image
@@ -161,6 +172,8 @@ export function OneFileHeader() {
             </DropdownMenu>
           ) : (
             <Button size="sm" asChild>
+              {/* API route starts the OAuth redirect; keep this as a full document navigation. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a href="/api/auth/github/start">
                 <LogIn data-icon="inline-start" />
                 登录
@@ -170,12 +183,18 @@ export function OneFileHeader() {
         </div>
       </div>
 
-      <StorageAccountDialog
-        open={accountsOpen}
-        onOpenChange={setAccountsOpen}
-      />
-      <ApiKeyDialog open={apiKeysOpen} onOpenChange={setApiKeysOpen} />
-      <SqlBackupDialog open={backupOpen} onOpenChange={setBackupOpen} />
+      {accountsOpen && (
+        <StorageAccountDialog
+          open={accountsOpen}
+          onOpenChange={setAccountsOpen}
+        />
+      )}
+      {apiKeysOpen && (
+        <ApiKeyDialog open={apiKeysOpen} onOpenChange={setApiKeysOpen} />
+      )}
+      {backupOpen && (
+        <SqlBackupDialog open={backupOpen} onOpenChange={setBackupOpen} />
+      )}
     </header>
   );
 }

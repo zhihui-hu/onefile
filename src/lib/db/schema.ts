@@ -292,8 +292,17 @@ export const fileApiKeys = sqliteTable(
     name: text('name').notNull(),
     tokenPrefix: text('token_prefix').notNull(),
     tokenHash: text('token_hash').notNull().unique(),
+    tokenCiphertext: text('token_ciphertext'),
     description: text('description'),
     scopes: text('scopes').notNull(),
+    storageBucketId: integer('storage_bucket_id').references(
+      () => storageBuckets.id,
+      { onDelete: 'set null' },
+    ),
+    compressImages: integer('compress_images').notNull().default(0),
+    publicUploadUuid: text('public_upload_uuid'),
+    publicUploadCreatedAt: text('public_upload_created_at'),
+    publicUploadRevokedAt: text('public_upload_revoked_at'),
     status: text('status', { enum: ['active', 'inactive'] })
       .notNull()
       .default('active'),
@@ -313,8 +322,14 @@ export const fileApiKeys = sqliteTable(
       table.userId,
       table.status,
     ),
+    index('idx_onefile_file_api_tokens_storage_bucket_id').on(
+      table.storageBucketId,
+    ),
     index('idx_onefile_file_api_tokens_prefix').on(table.tokenPrefix),
     index('idx_onefile_file_api_tokens_expires_at').on(table.expiresAt),
+    uniqueIndex('idx_onefile_file_api_tokens_public_upload_uuid')
+      .on(table.publicUploadUuid)
+      .where(sql`${table.publicUploadUuid} IS NOT NULL`),
   ],
 );
 

@@ -1,9 +1,10 @@
+import { headers } from 'next/headers';
 import Link from 'next/link';
 
 const endpoints = [
   ['GET', '/api/me', '当前登录用户'],
   ['GET', '/api/file-api-keys', '列出当前用户的 API key'],
-  ['POST', '/api/file-api-keys', '创建 API key，响应只返回一次 raw_key'],
+  ['POST', '/api/file-api-keys', '创建 API key，返回可复制的完整 raw_key'],
   [
     'PATCH',
     '/api/file-api-keys/:id',
@@ -17,12 +18,83 @@ const endpoints = [
   [
     'POST',
     '/api/uploads/direct',
-    'API key 服务端直传；compress=true 时图片转 WebP',
+    '服务端直传；API key 调用使用 key 上保存的 bucket 和压缩策略',
   ],
+  ['POST', '/api/public-uploads/:uuid', '公开上传链接直传，不暴露 raw API key'],
   ['POST', '/api/uploads/:id/parts', '签发分片上传 URL'],
   ['POST', '/api/uploads/:id/complete', '完成上传会话'],
   ['POST', '/api/uploads/:id/abort', '取消分片上传'],
 ] as const;
+
+type PageProps = {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+const fallbackApiKey =
+  'ofk_example010_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV';
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function apiKeyFromSearchParams(searchParams: {
+  [key: string]: string | string[] | undefined;
+}) {
+  return firstSearchParam(searchParams.key)?.trim().slice(0, 240);
+}
+
+function shellDoubleQuoted(value: string) {
+  return value.replace(/["\\$`]/g, '\\$&');
+}
+
+type HeaderReader = {
+  get(name: string): string | null;
+};
+
+function firstHeaderValue(value: string | null) {
+  return value?.split(',')[0]?.trim() || undefined;
+}
+
+function forwardedValue(headersList: HeaderReader, key: string) {
+  const forwarded = headersList.get('forwarded');
+  if (!forwarded) {
+    return undefined;
+  }
+
+  const first = forwarded.split(',')[0];
+  for (const part of first.split(';')) {
+    const [name, rawValue] = part.split('=');
+    if (name?.trim().toLowerCase() === key) {
+      return rawValue?.trim().replace(/^"|"$/g, '') || undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function inferredProtocol(host: string) {
+  return /^(localhost|127\.0\.0\.1|\[::1\])(?::|$)/.test(host)
+    ? 'http'
+    : 'https';
+}
+
+function pageOriginFromHeaders(headersList: HeaderReader) {
+  const host =
+    firstHeaderValue(headersList.get('x-forwarded-host')) ??
+    forwardedValue(headersList, 'host') ??
+    headersList.get('host') ??
+    'localhost:27507';
+  const protocol =
+    firstHeaderValue(headersList.get('x-forwarded-proto')) ??
+    forwardedValue(headersList, 'proto') ??
+    inferredProtocol(host);
+
+  return `${protocol}://${host.replace(/\/+$/, '')}`;
+}
+
+function urlFromOrigin(origin: string, path: string) {
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 const errors = [
   [
@@ -49,12 +121,24 @@ function CodeBlock({ children }: { children: string }) {
   );
 }
 
-export default function Page() {
+export default async function Page({ searchParams }: PageProps) {
+  const pageOrigin = pageOriginFromHeaders(await headers());
+  const apiUrl = (path: string) => urlFromOrigin(pageOrigin, path);
+  const apiKey =
+    apiKeyFromSearchParams((await searchParams) ?? {}) || fallbackApiKey;
+  const authHeader = `Authorization: Bearer ${apiKey}`;
+  const curlAuthHeader = shellDoubleQuoted(authHeader);
+  const hasRealApiKey = apiKey !== fallbackApiKey;
+
   return (
     <main className="h-full w-full overflow-auto">
       <article className="mx-auto max-w-3xl px-4 py-8 leading-7">
         <p className="mb-8">
-          <Link className="text-sm text-muted-foreground underline" href="/">
+          <Link
+            className="text-sm text-muted-foreground underline"
+            href="/"
+            prefetch={false}
+          >
             返回文件管理器
           </Link>
         </p>
@@ -63,19 +147,28 @@ export default function Page() {
 
         <p className="mt-4 text-muted-foreground">
           API key 面向脚本和外部服务；文件列表以对象存储 SDK
-          返回为准。网页端使用 GitHub OAuth，外部 API 使用 Bearer key。
+          返回为准。网页端使用 GitHub OAuth，外部 API 使用 Bearer
+          key。示例地址来自当前网页。
         </p>
 
         <h2 className="mt-10 text-xl font-semibold">认证</h2>
 
         <p>请求时在 Header 中携带 API key。</p>
 
-        <CodeBlock>{`Authorization: Bearer ofk_xxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}</CodeBlock>
+        <CodeBlock>{authHeader}</CodeBlock>
 
         <p>
-          在头像菜单打开 API key 管理，创建 key 后保存完整值。服务端只保存
-          hash，后续只能看到 key_prefix。
+          在 API key 管理里创建 key 后，可以从列表复制完整
+          token，也可以从操作菜单打开 API 文档。新生成的 key 会保存 hash
+          和加密后的完整值；迁移前的历史 key
+          如果没有完整值，只能显示前缀，需要重新创建一个新 key。
         </p>
+
+        {hasRealApiKey ? (
+          <p className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            当前页面示例已使用传入的真实 key。
+          </p>
+        ) : null}
 
         <p>
           分片上传需要 <code>uploads:write</code> scope；历史 key 如果已有{' '}
@@ -126,7 +219,7 @@ export default function Page() {
                 <tr key={`${method}-${path}`}>
                   <td className="border px-3 py-2 align-top">{method}</td>
                   <td className="border px-3 py-2 align-top">
-                    <code>{path}</code>
+                    <code>{apiUrl(path)}</code>
                   </td>
                   <td className="border px-3 py-2 align-top">{description}</td>
                 </tr>
@@ -141,15 +234,15 @@ export default function Page() {
 
         <h3 className="mt-6 font-semibold">浏览文件</h3>
 
-        <CodeBlock>{`curl -H "Authorization: Bearer $ONEFILE_API_KEY" \\
-  "/api/files?bucket_id=12&prefix=photos/&search=invoice"`}</CodeBlock>
+        <CodeBlock>{`curl -H "${curlAuthHeader}" \\
+  "${apiUrl('/api/files?bucket_id=12&prefix=photos/&search=invoice')}"`}</CodeBlock>
 
         <h3 className="mt-6 font-semibold">删除文件</h3>
 
-        <CodeBlock>{`curl -X DELETE -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+        <CodeBlock>{`curl -X DELETE -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"bucket_id":12,"object_key":"photos/a.png"}' \\
-  /api/files`}</CodeBlock>
+  ${apiUrl('/api/files')}`}</CodeBlock>
 
         <h2 className="mt-10 text-xl font-semibold">上传</h2>
 
@@ -165,24 +258,28 @@ export default function Page() {
         <h3 className="mt-6 font-semibold">创建上传会话</h3>
 
         <CodeBlock>{`# 指定 bucket
-POST /api/uploads
-{
-  "bucket_id": 12,
-  "object_key": "2026/04/28/report.pdf",
-  "original_filename": "report.pdf",
-  "file_size": 7340032,
-  "mime_type": "application/pdf",
-  "upload_mode": "single"
-}
+curl -X POST -H "${curlAuthHeader}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "bucket_id":12,
+    "object_key":"2026/04/28/report.pdf",
+    "original_filename":"report.pdf",
+    "file_size":7340032,
+    "mime_type":"application/pdf",
+    "upload_mode":"single"
+  }' \\
+  ${apiUrl('/api/uploads')}
 
 # 不指定 bucket，由服务端自动负载均衡选择
-POST /api/uploads
-{
-  "original_filename": "report.pdf",
-  "file_size": 7340032,
-  "mime_type": "application/pdf",
-  "upload_mode": "single"
-}`}</CodeBlock>
+curl -X POST -H "${curlAuthHeader}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "original_filename":"report.pdf",
+    "file_size":7340032,
+    "mime_type":"application/pdf",
+    "upload_mode":"single"
+  }' \\
+  ${apiUrl('/api/uploads')}`}</CodeBlock>
 
         <p>
           响应会包含 <code>bucket_id</code>、<code>bucket_name</code>、
@@ -195,10 +292,10 @@ POST /api/uploads
 
         <CodeBlock>{`curl -X PUT -T ./report.pdf "<upload_url>"
 
-curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"etag":"<etag-from-put-response>"}' \\
-  /api/uploads/:id/complete`}</CodeBlock>
+  ${apiUrl('/api/uploads/:id/complete')}`}</CodeBlock>
 
         <h3 className="mt-6 font-semibold">分片上传</h3>
 
@@ -210,7 +307,7 @@ curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
         </p>
 
         <CodeBlock>{`# 1. 创建 multipart 会话
-curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "object_key":"videos/big.mov",
@@ -220,18 +317,18 @@ curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
     "upload_mode":"multipart",
     "part_size":16777216
   }' \\
-  /api/uploads
+  ${apiUrl('/api/uploads')}
 
 # 2. 逐片签 URL，并用返回的 upload_url 直传对象存储
-curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"part_number":1,"content_length":16777216}' \\
-  /api/uploads/:id/parts
+  ${apiUrl('/api/uploads/:id/parts')}
 
 curl -X PUT --data-binary @part-0001 "<upload_url>"
 
 # 3. 带每片 ETag 完成 multipart
-curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "parts":[
@@ -239,26 +336,22 @@ curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
       {"part_number":2,"etag":"<etag-2>"}
     ]
   }' \\
-  /api/uploads/:id/complete`}</CodeBlock>
+  ${apiUrl('/api/uploads/:id/complete')}`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">API key 直传并压缩图片</h3>
+        <h3 className="mt-6 font-semibold">API key 直传</h3>
 
         <p>
           <code>/api/uploads/direct</code> 接收 <code>multipart/form-data</code>
-          ，适合脚本直接把文件交给 OneFile 服务端写入对象存储。传{' '}
-          <code>compress=true</code> 时，JPEG、PNG、WebP、AVIF、TIFF、HEIC
-          等图片会转为 WebP；不传或传 <code>compress=false</code>{' '}
-          时直接写入原文件。 非图片文件即使传了 <code>compress=true</code>{' '}
-          也会保持原格式。直传会经过服务端内存，当前限制 100
+          ，适合脚本直接把文件交给 OneFile 服务端写入对象存储。使用 API key
+          调用时，bucket 和图片压缩策略来自创建 key 时保存的配置；不需要每次传{' '}
+          <code>bucket_id</code> 或 <code>compress</code>。未指定 bucket 的 key
+          会在可用 bucket 中做默认负载均衡。直传会经过服务端内存，当前限制 100
           MiB；大文件仍建议使用 presigned URL 或分片上传。
         </p>
 
-        <CodeBlock>{`curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
+        <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
   -F "file=@./photo.png" \\
-  -F "bucket_id=12" \\
-  -F "current_prefix=photos/" \\
-  -F "compress=true" \\
-  /api/uploads/direct
+  ${apiUrl('/api/uploads/direct')}
 
 # 响应里的 compressed=true 表示已转为 WebP
 {
@@ -271,11 +364,26 @@ curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
   "error": null
 }`}</CodeBlock>
 
+        <h3 className="mt-6 font-semibold">公开上传链接</h3>
+
+        <p>
+          创建 API key 后会生成一个公开上传 URL，最后一段是 UUID。浏览器打开{' '}
+          <code>/:uuid</code> 会进入只允许选择照片的上传页；脚本可直接 POST
+          文件到 <code>/api/public-uploads/:uuid</code>。撤销链接会清空 UUID
+          映射，旧链接无法再找到对应 API key。
+        </p>
+
+        <CodeBlock>{`curl -X POST \\
+  -F "file=@./archive.zip" \\
+  ${apiUrl('/api/public-uploads/00000000-0000-0000-0000-000000000000')}`}</CodeBlock>
+
         <h2 className="mt-10 text-xl font-semibold">API key 管理</h2>
 
         <p>
-          API key 只能由网页登录用户创建和管理。创建成功时会返回一次完整
-          <code>raw_key</code>，之后服务端只保存 hash，列表接口只返回
+          API key 只能由网页登录用户创建和管理。创建成功时会返回完整
+          <code>raw_key</code>；列表接口也会返回新 key
+          的完整值，方便复制和跳转到带 key 的文档页。历史 key
+          如果没有加密保存的完整值，列表会退回显示
           <code>key_prefix</code>。
         </p>
 
@@ -283,19 +391,20 @@ curl -X POST -H "Authorization: Bearer $ONEFILE_API_KEY" \\
 curl -X POST -H "Content-Type: application/json" \\
   -d '{
     "name":"deploy-script",
-    "description":"CI upload key",
+    "bucket_id":null,
+    "compress_images":false,
     "scopes":["files:read","uploads:write"],
     "expires_at":null
   }' \\
-  /api/file-api-keys
+  ${apiUrl('/api/file-api-keys')}
 
 # 更新 API key
 curl -X PATCH -H "Content-Type: application/json" \\
-  -d '{"status":"inactive"}' \\
-  /api/file-api-keys/:id
+  -d '{"public_upload":"revoke"}' \\
+  ${apiUrl('/api/file-api-keys/:id')}
 
 # 删除 API key
-curl -X DELETE /api/file-api-keys/:id`}</CodeBlock>
+curl -X DELETE ${apiUrl('/api/file-api-keys/:id')}`}</CodeBlock>
 
         <h2 className="mt-10 text-xl font-semibold">错误码</h2>
 

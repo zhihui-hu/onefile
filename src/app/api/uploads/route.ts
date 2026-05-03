@@ -9,6 +9,7 @@ import {
   storageBuckets,
 } from '@/lib/db/schema';
 import { avoidObjectKeyConflict, buildObjectKey } from '@/lib/files/keys';
+import { scheduleUploadCleanup } from '@/lib/maintenance/cleanup';
 import {
   adapterFromAccountForBucket,
   applyBucketKeyPrefix,
@@ -163,7 +164,9 @@ export async function POST(request: NextRequest) {
       );
     }
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    // Calculate a reasonable timeout: 15 minutes base + 1 minute per 100MB
+    const timeoutMinutes = 15 + Math.ceil(payload.file_size / (100 * ONE_MIB));
+    const expiresAt = new Date(now.getTime() + timeoutMinutes * 60 * 1000);
     const uploadId = randomToken(18);
 
     if (mode === 'single') {
@@ -193,6 +196,8 @@ export async function POST(request: NextRequest) {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       });
+
+      scheduleUploadCleanup(uploadId, timeoutMinutes * 60 * 1000);
 
       return ok({
         id: uploadId,
@@ -252,6 +257,8 @@ export async function POST(request: NextRequest) {
         };
       }),
     );
+
+    scheduleUploadCleanup(uploadId, timeoutMinutes * 60 * 1000);
 
     return ok({
       id: uploadId,

@@ -158,14 +158,7 @@ export async function POST(
       completedEtag = head.etag ?? completedEtag;
     }
 
-    await db
-      .update(fileUploads)
-      .set({
-        status: 'completed',
-        completedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(fileUploads.id, upload.id));
+    await db.delete(fileUploads).where(eq(fileUploads.id, upload.id));
 
     return ok({
       completed: true,

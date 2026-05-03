@@ -24,10 +24,22 @@ const scopesSchema = z
   .min(1)
   .transform((scopes) => Array.from(new Set(scopes)) as ApiKeyScope[]);
 
+const bucketIdSchema = z.preprocess((value) => {
+  if (value === '' || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return Number(value);
+  }
+  return value;
+}, z.number().int().positive().nullable().optional());
+
 export const createFileApiKeySchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: nullableTrimmedString(500),
   scopes: scopesSchema,
+  bucket_id: bucketIdSchema,
+  compress_images: z.boolean().optional().default(false),
   expires_at: expiresAtSchema,
 });
 
@@ -35,8 +47,11 @@ export const updateFileApiKeySchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   description: nullableTrimmedString(500),
   scopes: scopesSchema.optional(),
+  bucket_id: bucketIdSchema,
+  compress_images: z.boolean().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   expires_at: expiresAtSchema,
+  public_upload: z.enum(['revoke', 'regenerate']).optional(),
 });
 
 export type UpdateFileApiKeyInput = z.infer<typeof updateFileApiKeySchema>;

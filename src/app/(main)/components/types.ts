@@ -78,13 +78,44 @@ export type FileListResult = {
 export type FileApiKey = {
   id: number | string;
   name: string;
+  key?: string | null;
+  raw_key?: string | null;
+  plain_key?: string | null;
+  has_full_key?: boolean;
   key_prefix?: string | null;
   description?: string | null;
   scopes?: string | string[];
+  bucket_id?: number | string | null;
+  bucket_name?: string | null;
+  compress_images?: boolean | null;
+  public_upload_uuid?: string | null;
+  public_upload_url?: string | null;
   status?: 'active' | 'inactive' | string;
   last_used_at?: string | null;
   expires_at?: string | null;
   created_at?: string | null;
+};
+
+export type FileApiKeyLinkAction = 'regenerate' | 'revoke';
+
+export type FileApiKeyPayload = {
+  name?: string;
+  description?: string | null;
+  scopes?: string[];
+  bucket_id?: number | string | null;
+  compress_images?: boolean;
+  status?: 'active' | 'inactive';
+  expires_at?: string | null;
+  public_upload?: FileApiKeyLinkAction;
+};
+
+export type FileApiKeyLinkPayload = {
+  action: FileApiKeyLinkAction;
+};
+
+export type PublicUploadResult = UploadDirectResult & {
+  public_upload_uuid?: string;
+  url?: string;
 };
 
 export type UploadMode = 'single' | 'multipart';

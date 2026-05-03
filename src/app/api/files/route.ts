@@ -39,71 +39,83 @@ function parentPrefix(prefix: string) {
 }
 
 export async function GET(request: NextRequest) {
-  return withApiHandler(async () => {
-    const auth = await getAuthContext(request, ['files:read']);
-    const bucketId = Number(request.nextUrl.searchParams.get('bucket_id'));
-    if (!Number.isInteger(bucketId)) {
-      throw new HttpError(400, 'BAD_REQUEST', 'bucket_id is required');
-    }
+  return withApiHandler(
+    async () => {
+      const auth = await getAuthContext(request, ['files:read']);
+      const bucketId = Number(request.nextUrl.searchParams.get('bucket_id'));
+      if (!Number.isInteger(bucketId)) {
+        throw new HttpError(400, 'BAD_REQUEST', 'bucket_id is required');
+      }
 
-    const prefix = sanitizePrefix(request.nextUrl.searchParams.get('prefix'));
-    const search = request.nextUrl.searchParams
-      .get('search')
-      ?.trim()
-      .toLowerCase();
-    const cursor = request.nextUrl.searchParams.get('cursor') ?? undefined;
-    const parsedLimit = Number(
-      request.nextUrl.searchParams.get('limit') ?? DEFAULT_FILE_PAGE_SIZE,
-    );
-    const limit = Number.isFinite(parsedLimit)
-      ? parsedLimit
-      : DEFAULT_FILE_PAGE_SIZE;
-    const { bucket, account } = await getStorageBucketForUser(
-      auth.user.id,
-      bucketId,
-    );
-    const adapter = adapterFromAccountForBucket(account, bucket);
-    const providerPrefix = applyBucketKeyPrefix(bucket, prefix);
-
-    const listed = await adapter.listObjects({
-      bucket: bucket.name,
-      region: bucket.region ?? undefined,
-      prefix: providerPrefix,
-      delimiter: '/',
-      cursor,
-      limit,
-    });
-
-    const items = listed.items
-      .map((item) => {
-        const relativePath = stripBucketKeyPrefix(bucket, item.path);
-        return {
-          kind: item.kind === 'directory' ? 'folder' : 'file',
-          name: item.name || nameFromPath(relativePath),
-          path: relativePath,
-          size: item.size ?? null,
-          updated_at: item.updatedAt?.toISOString() ?? null,
-          etag: item.etag ?? null,
-          mime_type: item.contentType ?? null,
-        };
-      })
-      .filter((item) =>
-        search
-          ? item.name.toLowerCase().includes(search) ||
-            item.path.toLowerCase().includes(search)
-          : true,
+      const prefix = sanitizePrefix(request.nextUrl.searchParams.get('prefix'));
+      const search = request.nextUrl.searchParams
+        .get('search')
+        ?.trim()
+        .toLowerCase();
+      const cursor = request.nextUrl.searchParams.get('cursor') ?? undefined;
+      const parsedLimit = Number(
+        request.nextUrl.searchParams.get('limit') ?? DEFAULT_FILE_PAGE_SIZE,
       );
+      const limit = Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : DEFAULT_FILE_PAGE_SIZE;
+      const { bucket, account } = await getStorageBucketForUser(
+        auth.user.id,
+        bucketId,
+      );
+      const adapter = adapterFromAccountForBucket(account, bucket);
+      const providerPrefix = applyBucketKeyPrefix(bucket, prefix);
 
-    return ok({
-      items,
-      prefix,
-      parent_prefix: parentPrefix(prefix),
-      page: {
-        next_cursor: listed.nextCursor ?? null,
-        is_truncated: listed.isTruncated,
+      const listed = await adapter.listObjects({
+        bucket: bucket.name,
+        region: bucket.region ?? undefined,
+        prefix: providerPrefix,
+        delimiter: '/',
+        cursor,
+        limit,
+      });
+
+      const items = listed.items
+        .map((item) => {
+          const relativePath = stripBucketKeyPrefix(bucket, item.path);
+          return {
+            kind: item.kind === 'directory' ? 'folder' : 'file',
+            name: item.name || nameFromPath(relativePath),
+            path: relativePath,
+            size: item.size ?? null,
+            updated_at: item.updatedAt?.toISOString() ?? null,
+            etag: item.etag ?? null,
+            mime_type: item.contentType ?? null,
+          };
+        })
+        .filter((item) =>
+          search
+            ? item.name.toLowerCase().includes(search) ||
+              item.path.toLowerCase().includes(search)
+            : true,
+        );
+
+      return ok({
+        items,
+        prefix,
+        parent_prefix: parentPrefix(prefix),
+        page: {
+          next_cursor: listed.nextCursor ?? null,
+          is_truncated: listed.isTruncated,
+        },
+      });
+    },
+    {
+      label: 'api/files:get',
+      request,
+      meta: {
+        bucket_id: request.nextUrl.searchParams.get('bucket_id'),
+        prefix: request.nextUrl.searchParams.get('prefix') ?? '',
+        cursor: request.nextUrl.searchParams.get('cursor'),
+        limit: request.nextUrl.searchParams.get('limit'),
       },
-    });
-  });
+    },
+  );
 }
 
 export async function DELETE(request: NextRequest) {

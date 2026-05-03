@@ -189,8 +189,14 @@ CREATE TABLE IF NOT EXISTS onefile_file_api_tokens (
   name TEXT NOT NULL,
   token_prefix TEXT NOT NULL,
   token_hash TEXT NOT NULL UNIQUE,
+  token_ciphertext TEXT,
   description TEXT,
   scopes TEXT NOT NULL,
+  storage_bucket_id INTEGER,
+  compress_images INTEGER NOT NULL DEFAULT 0,
+  public_upload_uuid TEXT,
+  public_upload_created_at TEXT,
+  public_upload_revoked_at TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   last_used_at TEXT,
   last_used_ip TEXT,
@@ -198,7 +204,8 @@ CREATE TABLE IF NOT EXISTS onefile_file_api_tokens (
   expires_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES onefile_users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES onefile_users(id) ON DELETE CASCADE,
+  FOREIGN KEY (storage_bucket_id) REFERENCES onefile_storage_buckets(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_onefile_file_api_tokens_user_status ON onefile_file_api_tokens(user_id, status);

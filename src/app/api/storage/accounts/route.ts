@@ -71,16 +71,19 @@ function throwStorageAccountConflict(error: unknown): never {
 }
 
 export async function GET() {
-  return withApiHandler(async () => {
-    const user = await requireUser();
-    const accounts = await db
-      .select()
-      .from(storageAccounts)
-      .where(eq(storageAccounts.userId, user.id))
-      .orderBy(desc(storageAccounts.createdAt));
+  return withApiHandler(
+    async () => {
+      const user = await requireUser();
+      const accounts = await db
+        .select()
+        .from(storageAccounts)
+        .where(eq(storageAccounts.userId, user.id))
+        .orderBy(desc(storageAccounts.createdAt));
 
-    return ok({ items: accounts.map(publicStorageAccount) });
-  });
+      return ok({ items: accounts.map(publicStorageAccount) });
+    },
+    { label: 'api/storage/accounts:get' },
+  );
 }
 
 export async function POST(request: Request) {

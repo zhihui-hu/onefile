@@ -13,6 +13,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { OverflowTooltipText } from '@/components/ui/overflow-tooltip-text';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
@@ -36,35 +37,25 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { Database, Pencil, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { bucketPublicBaseUrl } from './bucket-url';
 
-function useIsOverflowing<T extends HTMLElement>(value: string) {
+function useIsOverflowing<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
-  useEffect(() => {
+  const checkOverflow = () => {
     const node = ref.current;
-    if (!node) return;
-
-    const checkOverflow = () => {
-      setIsOverflowing(node.scrollWidth > node.clientWidth);
-    };
-
-    checkOverflow();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', checkOverflow);
-      return () => window.removeEventListener('resize', checkOverflow);
+    if (node) {
+      const nextOverflowing = node.scrollWidth > node.clientWidth;
+      setIsOverflowing((current) =>
+        current === nextOverflowing ? current : nextOverflowing,
+      );
     }
+  };
 
-    const observer = new ResizeObserver(checkOverflow);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [value]);
-
-  return [ref, isOverflowing] as const;
+  return [ref, isOverflowing, checkOverflow] as const;
 }
 
 function OverflowText({
@@ -74,30 +65,19 @@ function OverflowText({
   children: string;
   className?: string;
 }) {
-  const [ref, isOverflowing] = useIsOverflowing<HTMLSpanElement>(children);
-  const trigger = (
-    <span
-      ref={ref}
-      className={cn('block min-w-0 truncate cursor-pointer', className)}
+  return (
+    <OverflowTooltipText
+      className={cn('cursor-pointer', className)}
+      contentClassName="break-all"
     >
       {children}
-    </span>
-  );
-
-  if (!isOverflowing) {
-    return trigger;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-      <TooltipContent className="break-all">{children}</TooltipContent>
-    </Tooltip>
+    </OverflowTooltipText>
   );
 }
 
 function OverflowLink({ href }: { href: string }) {
-  const [ref, isOverflowing] = useIsOverflowing<HTMLAnchorElement>(href);
+  const [ref, isOverflowing, checkOverflow] =
+    useIsOverflowing<HTMLAnchorElement>();
   const trigger = (
     <a
       ref={ref}
@@ -105,6 +85,7 @@ function OverflowLink({ href }: { href: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
+      onPointerEnter={checkOverflow}
     >
       {href}
     </a>
