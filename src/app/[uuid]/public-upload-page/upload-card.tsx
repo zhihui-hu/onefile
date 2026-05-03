@@ -20,7 +20,6 @@ import { useState } from 'react';
 import { QrCodeDialog } from './qr-code-dialog';
 import type { ImageDimensions, StoredUpload } from './types';
 import {
-  FALLBACK_IMAGE_DIMENSIONS,
   IMAGE_BLUR_DATA_URL,
   bbcodeImage,
   markdownImage,
@@ -41,8 +40,6 @@ export function UploadCard({
   onCopy,
 }: UploadCardProps) {
   const [qrOpen, setQrOpen] = useState(false);
-  const imageWidth = dimensions?.width ?? FALLBACK_IMAGE_DIMENSIONS.width;
-  const imageHeight = dimensions?.height ?? FALLBACK_IMAGE_DIMENSIONS.height;
 
   const openUpload = () => {
     if (!upload.url) return;
@@ -54,7 +51,7 @@ export function UploadCard({
       <Card key={upload.id} size="sm" className="pt-0">
         <button
           type="button"
-          className="grid h-[200px] w-full place-items-center overflow-hidden bg-muted"
+          className="relative grid h-[200px] w-full place-items-center overflow-hidden bg-muted"
           disabled={!upload.url}
           onClick={openUpload}
         >
@@ -62,8 +59,8 @@ export function UploadCard({
             <Image
               alt={upload.name}
               blurDataURL={IMAGE_BLUR_DATA_URL}
-              className="h-[200px] w-full object-contain"
-              height={imageHeight}
+              className="object-contain"
+              fill
               loading="lazy"
               onLoad={(event) => {
                 const image = event.currentTarget;
@@ -81,9 +78,9 @@ export function UploadCard({
                 });
               }}
               placeholder="blur"
+              sizes="(max-width: 640px) 100vw, 320px"
               src={upload.url}
               unoptimized
-              width={imageWidth}
             />
           ) : (
             <ImageIcon />
