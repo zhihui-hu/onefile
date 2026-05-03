@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { debugError, debugLog } from '@/lib/debug';
 import { adapterFromAccountForBucket } from '@/lib/storage-config';
+import { eq } from 'drizzle-orm';
 
 export async function abortOrphanUpload(uploadId: string) {
   try {
