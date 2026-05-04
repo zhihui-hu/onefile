@@ -1,6 +1,6 @@
 {
-  "name": "OneFile",
-  "short_name": "OneFile",
+  "name": "Onefile",
+  "short_name": "Onefile",
   "icons": [
     {
       "src": "/pwa-192x192.png",
@@ -30,6 +30,6 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
-  "theme_color": "#FFFFFF",
-  "description": "OneFile 是一个聚合上传平台，支持 OSS、COS、Cloudflare R2、AWS S3、Oracle Object Storage 等多云存储，提供大文件分片上传、断点续传与跨云文件管理。"
+  "theme_color": "#0073e6",
+  "description": "OneFile 是一个多云文件上传与对象存储管理平台，支持 OSS、COS、Cloudflare R2、AWS S3、Oracle Object Storage 等云存储服务，提供大文件分片上传、断点续传与跨云文件统一管理。"
 }
