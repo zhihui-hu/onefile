@@ -6,22 +6,15 @@ export const runtime = 'nodejs';
 const GITHUB_API_VERSION = '2022-11-28';
 const VERSION_CHECK_REVALIDATE_SECONDS = 60 * 60;
 
-type GitHubRelease = {
-  html_url?: unknown;
-  published_at?: unknown;
-  tag_name?: unknown;
+type GitHubTag = {
+  commit?: {
+    sha?: unknown;
+    url?: unknown;
+  };
+  name?: unknown;
+  tarball_url?: unknown;
+  zipball_url?: unknown;
 };
-
-type GitHubRepo = {
-  default_branch?: unknown;
-  html_url?: unknown;
-};
-
-type RemotePackage = {
-  version?: unknown;
-};
-
-type LatestVersionSource = 'release' | 'package';
 
 class GitHubFetchError extends Error {
   readonly status: number;
@@ -75,6 +68,25 @@ function isNewerVersion(latestVersion: string, currentVersion: string) {
   return false;
 }
 
+function compareVersions(leftVersion: string, rightVersion: string) {
+  const leftParts = numericVersionParts(leftVersion);
+  const rightParts = numericVersionParts(rightVersion);
+
+  if (!leftParts?.length || !rightParts?.length) {
+    return leftVersion.localeCompare(rightVersion);
+  }
+
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const left = leftParts[index] ?? 0;
+    const right = rightParts[index] ?? 0;
+    if (left > right) return 1;
+    if (left < right) return -1;
+  }
+
+  return 0;
+}
+
 async function fetchGitHubJson<T>(url: string) {
   const response = await fetch(url, {
     headers: {
@@ -92,27 +104,13 @@ async function fetchGitHubJson<T>(url: string) {
   return (await response.json()) as T;
 }
 
-async function fetchRawJson<T>(url: string) {
-  const response = await fetch(url, {
-    next: { revalidate: VERSION_CHECK_REVALIDATE_SECONDS },
-  });
-
-  if (!response.ok) {
-    throw new GitHubFetchError(response.status, response.statusText);
-  }
-
-  return (await response.json()) as T;
-}
-
 function versionResult({
   latestVersion,
   publishedAt,
-  source,
   url,
 }: {
   latestVersion: string;
   publishedAt?: string | null;
-  source: LatestVersionSource;
   url: string;
 }) {
   const currentVersion = siteConfig.version;
@@ -123,36 +121,39 @@ function versionResult({
     latestVersion,
     latestVersionLabel: versionLabel(latestVersion),
     publishedAt: publishedAt ?? null,
-    source,
+    source: 'tag',
     updateAvailable: isNewerVersion(latestVersion, currentVersion),
     url,
   };
 }
 
-async function fetchLatestPackageVersion(owner: string, repo: string) {
-  const repoInfo = await fetchGitHubJson<GitHubRepo>(
-    `https://api.github.com/repos/${owner}/${repo}`,
-  );
-  const branch =
-    typeof repoInfo.default_branch === 'string'
-      ? repoInfo.default_branch
-      : 'main';
-  const remotePackage = await fetchRawJson<RemotePackage>(
-    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/package.json`,
+async function fetchLatestTagVersion(owner: string, repo: string) {
+  const tags = await fetchGitHubJson<GitHubTag[]>(
+    `https://api.github.com/repos/${owner}/${repo}/tags?per_page=100`,
   );
 
-  if (typeof remotePackage.version !== 'string') {
-    throw new Error('Remote package.json does not contain a version');
+  const latestTag = tags
+    .filter((tag): tag is GitHubTag & { name: string } => {
+      return typeof tag.name === 'string' && tag.name.trim().length > 0;
+    })
+    .sort((left, right) => compareVersions(right.name, left.name))[0];
+
+  if (!latestTag) {
+    throw new Error('GitHub repository does not contain any tags');
   }
 
   return versionResult({
-    latestVersion: remotePackage.version,
-    source: 'package',
-    url:
-      typeof repoInfo.html_url === 'string'
-        ? `${repoInfo.html_url}/blob/${branch}/package.json`
-        : siteConfig.githubUrl,
+    latestVersion: latestTag.name,
+    url: `${siteConfig.githubUrl}/releases/tag/${encodeURIComponent(
+      latestTag.name,
+    )}`,
   });
+}
+
+function cacheHeaders() {
+  return {
+    'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+  };
 }
 
 export async function GET() {
@@ -160,43 +161,8 @@ export async function GET() {
     async () => {
       const { owner, repo } = githubRepoPath();
 
-      try {
-        const release = await fetchGitHubJson<GitHubRelease>(
-          `https://api.github.com/repos/${owner}/${repo}/releases/latest`,
-        );
-
-        if (typeof release.tag_name === 'string') {
-          return ok(
-            versionResult({
-              latestVersion: release.tag_name,
-              publishedAt:
-                typeof release.published_at === 'string'
-                  ? release.published_at
-                  : null,
-              source: 'release',
-              url:
-                typeof release.html_url === 'string'
-                  ? release.html_url
-                  : `${siteConfig.githubUrl}/releases/latest`,
-            }),
-            {
-              headers: {
-                'Cache-Control':
-                  'public, max-age=300, stale-while-revalidate=3600',
-              },
-            },
-          );
-        }
-      } catch (error) {
-        if (!(error instanceof GitHubFetchError)) {
-          throw error;
-        }
-      }
-
-      return ok(await fetchLatestPackageVersion(owner, repo), {
-        headers: {
-          'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
-        },
+      return ok(await fetchLatestTagVersion(owner, repo), {
+        headers: cacheHeaders(),
       });
     },
     { label: 'api/version/latest' },

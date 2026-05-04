@@ -21,7 +21,7 @@ type VersionCheckResult = {
   latestVersion: string;
   latestVersionLabel: string;
   publishedAt: string | null;
-  source: 'release' | 'package';
+  source: 'tag';
   updateAvailable: boolean;
   url: string;
 };
@@ -128,11 +128,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">检查来源</span>
-                <span>
-                  {versionCheck.source === 'release'
-                    ? 'GitHub Release'
-                    : 'GitHub package.json'}
-                </span>
+                <span>GitHub Tag</span>
               </div>
             </div>
           )}
