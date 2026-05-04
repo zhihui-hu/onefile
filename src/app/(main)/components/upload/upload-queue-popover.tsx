@@ -20,6 +20,12 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   FileArchive,
   ListChecks,
   ListX,
@@ -93,7 +99,7 @@ export function UploadQueuePopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(24rem,calc(100vw-2rem))] p-0"
+        className="w-[min(30rem,calc(100vw-2rem))] p-0"
       >
         <PopoverHeader className="gap-2 p-3 pb-2">
           <div className="flex items-start justify-between gap-3">
@@ -124,20 +130,22 @@ export function UploadQueuePopover({
           <Progress value={stats.totalProgress} />
         </PopoverHeader>
         <Separator />
-        <ScrollArea className="max-h-80">
-          <div className="flex flex-col gap-2 p-2">
-            {tasks.map((task) => (
-              <UploadQueueItem
-                key={task.id}
-                task={task}
-                onCancelTask={onCancelTask}
-                onPauseTask={onPauseTask}
-                onRemoveTask={onRemoveTask}
-                onResumeTask={onResumeTask}
-              />
-            ))}
-          </div>
-        </ScrollArea>
+        <TooltipProvider>
+          <ScrollArea className="max-h-80">
+            <div className="divide-y">
+              {tasks.map((task) => (
+                <UploadQueueItem
+                  key={task.id}
+                  task={task}
+                  onCancelTask={onCancelTask}
+                  onPauseTask={onPauseTask}
+                  onRemoveTask={onRemoveTask}
+                  onResumeTask={onResumeTask}
+                />
+              ))}
+            </div>
+          </ScrollArea>
+        </TooltipProvider>
       </PopoverContent>
     </Popover>
   );
@@ -157,95 +165,100 @@ function UploadQueueItem({
   task: UploadTask;
 }) {
   const meta = statusMeta[task.status];
+  const filePath = relativePath(task.file);
 
   return (
-    <div className="rounded-lg border bg-card p-2.5 text-card-foreground">
-      <div className="flex items-start gap-2">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <FileArchive />
+    <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-2 px-3 py-2.5">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <FileArchive />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="block max-w-full truncate text-sm font-medium"
+          title={filePath}
+        >
+          {filePath}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="min-w-0 flex-1 truncate text-sm font-medium">
-              {relativePath(task.file)}
-            </div>
-            <Badge variant={meta.variant}>{meta.label}</Badge>
-          </div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {formatBytes(task.file.size)} · {task.objectKey}
-          </div>
+        <div className="mt-1 grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant={meta.variant}>{meta.label}</Badge>
+          <span className="shrink-0">{formatBytes(task.file.size)}</span>
+          <span className="block min-w-0 truncate" title={task.objectKey}>
+            {task.objectKey}
+          </span>
         </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <Progress value={task.progress} className="min-w-0 flex-1" />
+          <span className="w-9 shrink-0 text-right text-xs text-muted-foreground">
+            {task.progress}%
+          </span>
+        </div>
+
+        {task.error && (
+          <div className="mt-1.5 break-words text-xs text-destructive">
+            {task.error}
+          </div>
+        )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
-        <Progress value={task.progress} className="flex-1" />
-        <span className="w-9 text-right text-xs text-muted-foreground">
-          {task.progress}%
-        </span>
-      </div>
-
-      {task.error && (
-        <div className="mt-1.5 text-xs text-destructive">{task.error}</div>
-      )}
-
-      <div className="mt-2 flex items-center justify-end gap-1">
+      <div className="flex shrink-0 items-center justify-end gap-1">
         {(task.status === 'uploading' || task.status === 'preparing') && (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => onPauseTask(task)}
-            className="cursor-pointer"
-          >
+          <UploadTaskAction label="暂停上传" onClick={() => onPauseTask(task)}>
             <Pause />
-            <span className="sr-only">暂停上传</span>
-          </Button>
+          </UploadTaskAction>
         )}
         {task.status === 'paused' && (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => onResumeTask(task)}
-            className="cursor-pointer"
-          >
+          <UploadTaskAction label="继续上传" onClick={() => onResumeTask(task)}>
             <Play />
-            <span className="sr-only">继续上传</span>
-          </Button>
+          </UploadTaskAction>
         )}
         {(task.status === 'failed' || task.status === 'aborted') && (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => onResumeTask(task)}
-            className="cursor-pointer"
-          >
+          <UploadTaskAction label="重试上传" onClick={() => onResumeTask(task)}>
             <RotateCcw />
-            <span className="sr-only">重试上传</span>
-          </Button>
+          </UploadTaskAction>
         )}
         {task.status !== 'completed' &&
           task.status !== 'failed' &&
           task.status !== 'aborted' &&
           task.status !== 'paused' && (
-            <Button
-              size="icon-xs"
-              variant="ghost"
+            <UploadTaskAction
+              label="取消上传"
               onClick={() => onCancelTask(task)}
-              className="cursor-pointer"
             >
               <X />
-              <span className="sr-only">取消上传</span>
-            </Button>
+            </UploadTaskAction>
           )}
+        <UploadTaskAction label="删除任务" onClick={() => onRemoveTask(task)}>
+          <Trash2 />
+        </UploadTaskAction>
+      </div>
+    </div>
+  );
+}
+
+function UploadTaskAction({
+  children,
+  label,
+  onClick,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
         <Button
           size="icon-xs"
           variant="ghost"
-          onClick={() => onRemoveTask(task)}
+          onClick={onClick}
           className="cursor-pointer"
         >
-          <Trash2 />
-          <span className="sr-only">删除任务</span>
+          {children}
+          <span className="sr-only">{label}</span>
         </Button>
-      </div>
-    </div>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
