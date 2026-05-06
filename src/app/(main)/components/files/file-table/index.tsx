@@ -30,7 +30,6 @@ import {
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { debugLog, debugLogLimited } from '@/lib/debug';
 import { cn } from '@/lib/utils';
 import {
   type ColumnDef,
@@ -245,27 +244,7 @@ export function FileTable({
   const directoryMenuEnabled =
     selectedFiles.length === 0 && Boolean(onRefresh || onCreateFolder);
 
-  debugLogLimited('file-table:render', {
-    bucket_id: bucket?.id ?? null,
-    items_count: items.length,
-    loading,
-    loading_more: loadingMore,
-    has_more: hasMore,
-    selection_reset_key: selectionResetKey,
-    selected_count: selectedFiles.length,
-    row_count: table.getRowModel().rows.length,
-  });
-
   useEffect(() => {
-    debugLog('file-table:load-more-effect', {
-      bucket_id: bucket?.id ?? null,
-      items_count: items.length,
-      loading,
-      loading_more: loadingMore,
-      has_more: hasMore,
-      has_on_load_more: Boolean(onLoadMore),
-    });
-
     if (!hasMore || loading || loadingMore || !onLoadMore) return;
 
     const target = loadMoreRef.current;
@@ -279,10 +258,6 @@ export function FileTable({
       const requestLoadMore = () => {
         if (loadMoreRequestedRef.current) return;
         loadMoreRequestedRef.current = true;
-        debugLog('file-table:load-more:fallback-trigger', {
-          bucket_id: bucket?.id ?? null,
-          items_count: items.length,
-        });
         onLoadMore();
       };
 
@@ -305,21 +280,6 @@ export function FileTable({
         if (entry?.isIntersecting) {
           if (loadMoreRequestedRef.current) return;
           loadMoreRequestedRef.current = true;
-          debugLog('file-table:load-more:intersection', {
-            bucket_id: bucket?.id ?? null,
-            items_count: items.length,
-            intersection_ratio: entry.intersectionRatio,
-            root_bounds: entry.rootBounds
-              ? {
-                  height: entry.rootBounds.height,
-                  width: entry.rootBounds.width,
-                }
-              : null,
-            bounding_rect: {
-              height: entry.boundingClientRect.height,
-              top: entry.boundingClientRect.top,
-            },
-          });
           onLoadMore();
         }
       },
@@ -331,7 +291,7 @@ export function FileTable({
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [bucket?.id, hasMore, items.length, loading, loadingMore, onLoadMore]);
+  }, [hasMore, items.length, loading, loadingMore, onLoadMore]);
 
   if (error) {
     return (

@@ -1,4 +1,3 @@
-import { debugError, debugLog } from '@/lib/debug';
 import { NextResponse } from 'next/server';
 import { ZodError, type ZodSchema } from 'zod';
 
@@ -69,63 +68,10 @@ export async function parseJson<T>(request: Request, schema: ZodSchema<T>) {
   return schema.parse(payload);
 }
 
-type ApiHandlerDebugOptions = {
-  label?: string;
-  request?: Request;
-  meta?: Record<string, unknown>;
-};
-
-function requestDebugMeta(request?: Request) {
-  if (!request) {
-    return {};
-  }
-
+export async function withApiHandler<T>(handler: () => Promise<T>) {
   try {
-    const url = new URL(request.url);
-    return {
-      method: request.method,
-      pathname: url.pathname,
-      search: url.search,
-    };
-  } catch {
-    return { method: request.method, url: request.url };
-  }
-}
-
-export async function withApiHandler<T>(
-  handler: () => Promise<T>,
-  debugOptions: ApiHandlerDebugOptions = {},
-) {
-  const startedAt = Date.now();
-  const debugMeta = {
-    label: debugOptions.label,
-    ...requestDebugMeta(debugOptions.request),
-    ...debugOptions.meta,
-  };
-
-  if (debugOptions.label) {
-    debugLog('api:start', debugMeta);
-  }
-
-  try {
-    const response = await handler();
-    if (debugOptions.label) {
-      debugLog('api:end', {
-        ...debugMeta,
-        duration_ms: Date.now() - startedAt,
-        status: response instanceof Response ? response.status : undefined,
-      });
-    }
-    return response;
+    return await handler();
   } catch (error) {
-    if (debugOptions.label) {
-      debugError('api:error', {
-        ...debugMeta,
-        duration_ms: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
     if (error instanceof HttpError) {
       return fail(error.status, error.code, error.message, error.details);
     }

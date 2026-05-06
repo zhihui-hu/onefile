@@ -2,28 +2,46 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 
 const endpoints = [
-  ['GET', '/api/me', '当前登录用户'],
-  ['GET', '/api/file-api-keys', '列出当前用户的 API key'],
-  ['POST', '/api/file-api-keys', '创建 API key，返回可复制的完整 raw_key'],
   [
-    'PATCH',
-    '/api/file-api-keys/:id',
-    '更新 API key 名称、scope、状态或过期时间',
+    'GET',
+    '/api/storage/buckets',
+    'files:read',
+    '列出当前 API key 所属用户的 bucket，用于获取 bucket_id',
   ],
-  ['DELETE', '/api/file-api-keys/:id', '删除 API key'],
-  ['GET', '/api/storage/buckets', '列出已同步 bucket'],
-  ['GET', '/api/files?bucket_id=&prefix=&search=', '浏览真实对象存储目录'],
-  ['DELETE', '/api/files', '按 bucket_id + object_key 删除对象'],
-  ['POST', '/api/uploads', '创建服务端分片上传会话'],
+  [
+    'GET',
+    '/api/files?bucket_id=&prefix=&search=',
+    'files:read',
+    '浏览真实对象存储目录',
+  ],
+  ['POST', '/api/files/folders', 'files:write', '创建对象存储目录占位对象'],
+  [
+    'DELETE',
+    '/api/files',
+    'files:delete',
+    '按 bucket_id + object_key 删除对象',
+  ],
+  ['POST', '/api/uploads', 'uploads:write', '创建服务端分片上传会话'],
   [
     'POST',
     '/api/uploads/direct',
+    'uploads:write',
     '服务端上传；API key 调用使用 key 上保存的 bucket 和压缩策略',
   ],
-  ['POST', '/api/public-uploads/:uuid', '公开上传链接上传，不暴露 raw API key'],
-  ['POST', '/api/uploads/:id/parts/upload', '通过服务端上传一个分片'],
-  ['POST', '/api/uploads/:id/complete', '完成上传会话'],
-  ['POST', '/api/uploads/:id/abort', '取消分片上传'],
+  [
+    'POST',
+    '/api/public-uploads/:uuid',
+    '公开 UUID',
+    'API key 派生的公开上传链接上传，不暴露 raw key',
+  ],
+  [
+    'POST',
+    '/api/uploads/:id/parts/upload',
+    'uploads:write',
+    '通过服务端上传一个分片',
+  ],
+  ['POST', '/api/uploads/:id/complete', 'uploads:write', '完成上传会话'],
+  ['POST', '/api/uploads/:id/abort', 'uploads:write', '取消分片上传'],
 ] as const;
 
 type PageProps = {
@@ -146,14 +164,17 @@ export default async function Page({ searchParams }: PageProps) {
         <h1 className="text-3xl font-semibold">OneFile API 文档</h1>
 
         <p className="mt-4 text-muted-foreground">
-          API key 面向脚本和外部服务；文件列表以对象存储 SDK
-          返回为准。网页端使用 GitHub OAuth，外部 API 使用 Bearer
-          key。示例地址来自当前网页。
+          API key 面向脚本和外部服务；这里仅列出外部调用需要的 API key
+          接口，以及 API key 派生的公开上传接口。网页登录、API key
+          创建/编辑/删除等系统自用接口不在此文档中展示。示例地址来自当前网页。
         </p>
 
         <h2 className="mt-10 text-xl font-semibold">认证</h2>
 
-        <p>请求时在 Header 中携带 API key。</p>
+        <p>
+          除公开上传链接外，请求时在 Header 中携带 API key。 公开上传链接使用
+          URL 中的 UUID，不需要暴露 raw key。
+        </p>
 
         <CodeBlock>{authHeader}</CodeBlock>
 
@@ -171,8 +192,10 @@ export default async function Page({ searchParams }: PageProps) {
         ) : null}
 
         <p>
-          分片上传需要 <code>uploads:write</code> scope；历史 key 如果已有{' '}
-          <code>files:write</code>，也会被视为具备上传写入权限。
+          <code>files:read</code> 可列 bucket 和浏览文件；
+          <code>files:write</code> 可创建目录，历史 key 如果已有该 scope
+          也会被视为具备上传写入权限；<code>files:delete</code> 可删除对象；
+          <code>uploads:write</code> 可上传文件。
         </p>
 
         <h2 className="mt-10 text-xl font-semibold">统一响应</h2>
@@ -203,7 +226,7 @@ export default async function Page({ searchParams }: PageProps) {
 
         <h2 className="mt-10 text-xl font-semibold">端点</h2>
 
-        <p>内部页面和 API key 调用共享这些合同。</p>
+        <p>下列端点支持 Bearer API key，或使用 API key 派生的公开上传 UUID。</p>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -211,15 +234,19 @@ export default async function Page({ searchParams }: PageProps) {
               <tr>
                 <th className="border px-3 py-2 text-left">Method</th>
                 <th className="border px-3 py-2 text-left">Path</th>
+                <th className="border px-3 py-2 text-left">Scope</th>
                 <th className="border px-3 py-2 text-left">用途</th>
               </tr>
             </thead>
             <tbody>
-              {endpoints.map(([method, path, description]) => (
+              {endpoints.map(([method, path, scope, description]) => (
                 <tr key={`${method}-${path}`}>
                   <td className="border px-3 py-2 align-top">{method}</td>
                   <td className="border px-3 py-2 align-top">
                     <code>{apiUrl(path)}</code>
+                  </td>
+                  <td className="border px-3 py-2 align-top">
+                    <code>{scope}</code>
                   </td>
                   <td className="border px-3 py-2 align-top">{description}</td>
                 </tr>
@@ -228,14 +255,26 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        <h2 className="mt-10 text-xl font-semibold">浏览与删除</h2>
+        <h2 className="mt-10 text-xl font-semibold">Bucket 与文件</h2>
 
         <p>删除基于 bucket_id 和 object_key，不依赖本地 file id。</p>
+
+        <h3 className="mt-6 font-semibold">列出 bucket</h3>
+
+        <CodeBlock>{`curl -H "${curlAuthHeader}" \\
+  ${apiUrl('/api/storage/buckets')}`}</CodeBlock>
 
         <h3 className="mt-6 font-semibold">浏览文件</h3>
 
         <CodeBlock>{`curl -H "${curlAuthHeader}" \\
   "${apiUrl('/api/files?bucket_id=12&prefix=photos/&search=invoice')}"`}</CodeBlock>
+
+        <h3 className="mt-6 font-semibold">创建目录</h3>
+
+        <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"bucket_id":12,"prefix":"photos/","name":"2026"}' \\
+  ${apiUrl('/api/files/folders')}`}</CodeBlock>
 
         <h3 className="mt-6 font-semibold">删除文件</h3>
 
@@ -339,35 +378,6 @@ curl -X POST -H "${curlAuthHeader}" \\
         <CodeBlock>{`curl -X POST \\
   -F "file=@./archive.zip" \\
   ${apiUrl('/api/public-uploads/00000000-0000-0000-0000-000000000000')}`}</CodeBlock>
-
-        <h2 className="mt-10 text-xl font-semibold">API key 管理</h2>
-
-        <p>
-          API key 只能由网页登录用户创建和管理。创建成功时会返回完整
-          <code>raw_key</code>；列表接口也会返回新 key
-          的完整值，方便复制和跳转到带 key 的文档页。历史 key
-          如果没有加密保存的完整值，列表会退回显示
-          <code>key_prefix</code>。
-        </p>
-
-        <CodeBlock>{`# 创建 API key
-curl -X POST -H "Content-Type: application/json" \\
-  -d '{
-    "name":"deploy-script",
-    "bucket_id":null,
-    "compress_images":false,
-    "scopes":["files:read","uploads:write"],
-    "expires_at":null
-  }' \\
-  ${apiUrl('/api/file-api-keys')}
-
-# 更新 API key
-curl -X PATCH -H "Content-Type: application/json" \\
-  -d '{"public_upload":"revoke"}' \\
-  ${apiUrl('/api/file-api-keys/:id')}
-
-# 删除 API key
-curl -X DELETE ${apiUrl('/api/file-api-keys/:id')}`}</CodeBlock>
 
         <h2 className="mt-10 text-xl font-semibold">错误码</h2>
 

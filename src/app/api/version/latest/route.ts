@@ -49,26 +49,89 @@ function numericVersionParts(version: string) {
     .filter(Number.isFinite);
 }
 
-function isNewerVersion(latestVersion: string, currentVersion: string) {
-  const latestParts = numericVersionParts(latestVersion);
-  const currentParts = numericVersionParts(currentVersion);
-
-  if (!latestParts?.length || !currentParts?.length) {
-    return latestVersion.trim() !== currentVersion.trim();
-  }
-
-  const length = Math.max(latestParts.length, currentParts.length);
-  for (let index = 0; index < length; index += 1) {
-    const latest = latestParts[index] ?? 0;
-    const current = currentParts[index] ?? 0;
-    if (latest > current) return true;
-    if (latest < current) return false;
-  }
-
-  return false;
+function daysInMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-function compareVersions(leftVersion: string, rightVersion: string) {
+function parseVersionYear(yearText: string) {
+  if (!/^\d{2}(\d{2})?$/.test(yearText)) return null;
+
+  const year = Number(yearText);
+  if (!Number.isInteger(year)) return null;
+
+  return yearText.length === 2 ? 2000 + year : year;
+}
+
+function parseVersionMonthDay(year: number, monthDayText: string) {
+  if (!/^\d{2,4}$/.test(monthDayText)) return null;
+
+  for (const monthLength of [2, 1]) {
+    if (monthDayText.length <= monthLength) continue;
+
+    const month = Number(monthDayText.slice(0, monthLength));
+    const day = Number(monthDayText.slice(monthLength));
+
+    if (
+      Number.isInteger(month) &&
+      Number.isInteger(day) &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= daysInMonth(year, month)
+    ) {
+      return { day, month };
+    }
+  }
+
+  return null;
+}
+
+function parseVersionTime(timeText: string) {
+  if (!/^\d{1,4}$/.test(timeText)) return null;
+
+  const normalized = timeText.padStart(4, '0');
+  const hour = Number(normalized.slice(0, 2));
+  const minute = Number(normalized.slice(2));
+
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  return { hour, minute };
+}
+
+function dateVersionTimestamp(version: string) {
+  const [yearText, monthDayText, timeText] = version
+    .trim()
+    .replace(/^v/i, '')
+    .split('.');
+
+  if (!yearText || !monthDayText || !timeText) return null;
+
+  const year = parseVersionYear(yearText);
+  if (!year) return null;
+
+  const monthDay = parseVersionMonthDay(year, monthDayText);
+  const time = parseVersionTime(timeText);
+  if (!monthDay || !time) return null;
+
+  return Date.UTC(
+    year,
+    monthDay.month - 1,
+    monthDay.day,
+    time.hour,
+    time.minute,
+  );
+}
+
+function compareNumericVersions(leftVersion: string, rightVersion: string) {
   const leftParts = numericVersionParts(leftVersion);
   const rightParts = numericVersionParts(rightVersion);
 
@@ -85,6 +148,23 @@ function compareVersions(leftVersion: string, rightVersion: string) {
   }
 
   return 0;
+}
+
+function compareVersions(leftVersion: string, rightVersion: string) {
+  const leftTimestamp = dateVersionTimestamp(leftVersion);
+  const rightTimestamp = dateVersionTimestamp(rightVersion);
+
+  if (leftTimestamp !== null && rightTimestamp !== null) {
+    if (leftTimestamp > rightTimestamp) return 1;
+    if (leftTimestamp < rightTimestamp) return -1;
+    return 0;
+  }
+
+  return compareNumericVersions(leftVersion, rightVersion);
+}
+
+function isNewerVersion(latestVersion: string, currentVersion: string) {
+  return compareVersions(latestVersion, currentVersion) > 0;
 }
 
 async function fetchGitHubJson<T>(url: string) {
@@ -157,14 +237,11 @@ function cacheHeaders() {
 }
 
 export async function GET() {
-  return withApiHandler(
-    async () => {
-      const { owner, repo } = githubRepoPath();
+  return withApiHandler(async () => {
+    const { owner, repo } = githubRepoPath();
 
-      return ok(await fetchLatestTagVersion(owner, repo), {
-        headers: cacheHeaders(),
-      });
-    },
-    { label: 'api/version/latest' },
-  );
+    return ok(await fetchLatestTagVersion(owner, repo), {
+      headers: cacheHeaders(),
+    });
+  });
 }

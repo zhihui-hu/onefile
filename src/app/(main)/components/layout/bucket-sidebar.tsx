@@ -38,7 +38,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { debugLog, debugLogLimited } from '@/lib/debug';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Database, Plus, RefreshCw, Search } from 'lucide-react';
 import Image from 'next/image';
@@ -162,16 +161,6 @@ export function BucketSidebar({
     }, []);
   }, [accountMap, buckets, search]);
 
-  debugLogLimited('bucket-sidebar:render', {
-    accounts_count: accounts.length,
-    buckets_count: buckets.length,
-    groups_count: groups.length,
-    selected_bucket_id: selectedBucket?.id ?? null,
-    loading,
-    refreshing,
-    search,
-  });
-
   return (
     <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-muted/20">
       <div className="flex items-center gap-1.5 border-b p-2">
@@ -188,10 +177,7 @@ export function BucketSidebar({
             <InputGroupButton
               size="icon-xs"
               variant="ghost"
-              onClick={() => {
-                debugLog('bucket-sidebar:refresh-click');
-                onRefresh();
-              }}
+              onClick={onRefresh}
               className="cursor-pointer"
             >
               <RefreshCw className={cn(refreshing && 'animate-spin')} />

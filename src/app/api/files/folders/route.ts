@@ -39,46 +39,40 @@ function sanitizeFolderName(name: string) {
 }
 
 export async function POST(request: NextRequest) {
-  return withApiHandler(
-    async () => {
-      const auth = await getAuthContext(request, ['files:write']);
-      const payload = await parseJson(request, createFolderSchema);
-      const bucketId = Number(payload.bucket_id);
-      if (!Number.isInteger(bucketId)) {
-        throw new HttpError(400, 'BAD_REQUEST', 'Invalid bucket_id');
-      }
+  return withApiHandler(async () => {
+    const auth = await getAuthContext(request, ['files:write']);
+    const payload = await parseJson(request, createFolderSchema);
+    const bucketId = Number(payload.bucket_id);
+    if (!Number.isInteger(bucketId)) {
+      throw new HttpError(400, 'BAD_REQUEST', 'Invalid bucket_id');
+    }
 
-      const prefix = sanitizePrefix(payload.prefix);
-      const folderName = sanitizeFolderName(payload.name);
-      const objectKey = `${prefix}${folderName}/`;
-      const { bucket, account } = await getStorageBucketForUser(
-        auth.user.id,
-        bucketId,
-      );
-      const adapter = adapterFromAccountForBucket(account, bucket);
-      const providerKey = applyBucketKeyPrefix(bucket, objectKey);
+    const prefix = sanitizePrefix(payload.prefix);
+    const folderName = sanitizeFolderName(payload.name);
+    const objectKey = `${prefix}${folderName}/`;
+    const { bucket, account } = await getStorageBucketForUser(
+      auth.user.id,
+      bucketId,
+    );
+    const adapter = adapterFromAccountForBucket(account, bucket);
+    const providerKey = applyBucketKeyPrefix(bucket, objectKey);
 
-      await adapter.putObject({
-        bucket: bucket.name,
-        region: bucket.region ?? undefined,
-        key: providerKey,
-        body: Buffer.alloc(0),
-        contentType: 'application/x-directory',
-        contentLength: 0,
-        preventOverwrite: true,
-        metadata: {
-          'onefile-kind': 'folder',
-        },
-      });
+    await adapter.putObject({
+      bucket: bucket.name,
+      region: bucket.region ?? undefined,
+      key: providerKey,
+      body: Buffer.alloc(0),
+      contentType: 'application/x-directory',
+      contentLength: 0,
+      preventOverwrite: true,
+      metadata: {
+        'onefile-kind': 'folder',
+      },
+    });
 
-      return ok({
-        created: true,
-        object_key: stripBucketKeyPrefix(bucket, providerKey),
-      });
-    },
-    {
-      label: 'api/files/folders:post',
-      request,
-    },
-  );
+    return ok({
+      created: true,
+      object_key: stripBucketKeyPrefix(bucket, providerKey),
+    });
+  });
 }

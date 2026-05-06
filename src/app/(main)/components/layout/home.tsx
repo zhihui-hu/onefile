@@ -22,7 +22,6 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { debugLog, debugLogLimited } from '@/lib/debug';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Database, FileUp, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -134,25 +133,8 @@ export function OneFileHome() {
   const storageDialogOpen = accountsOpen || createAccountOpen;
   const storageQueriesReady = accountsQuery.isSuccess && bucketsQuery.isSuccess;
 
-  debugLogLimited('home:render', {
-    me_status: meQuery.status,
-    accounts_status: accountsQuery.status,
-    buckets_status: bucketsQuery.status,
-    accounts_count: accounts.length,
-    buckets_count: buckets.length,
-    selected_bucket_id: selectedBucketId,
-    selected_prefix: selectedPrefix,
-    location_ready: locationReady,
-  });
-
   useEffect(() => {
-    debugLog('home:restore-location:start');
     const stored = readStoredFileLocation();
-    debugLog('home:restore-location:end', {
-      selected_bucket_id: stored.selectedBucketId,
-      selected_address: stored.selectedAddress,
-      prefix_count: Object.keys(stored.prefixes).length,
-    });
     setSelectedBucketId(stored.selectedBucketId);
     setBucketPrefixes(stored.prefixes);
     setLocationReady(true);
@@ -165,9 +147,6 @@ export function OneFileHome() {
 
     if (!buckets.length) {
       if (selectedBucketId !== null) {
-        debugLog('home:bucket-selection:empty', {
-          previous_bucket_id: selectedBucketId,
-        });
         setSelectedBucketId(null);
       }
       return;
@@ -181,11 +160,6 @@ export function OneFileHome() {
     }
 
     const next = buckets[0];
-    debugLog('home:bucket-selection:fallback', {
-      previous_bucket_id: selectedBucketId,
-      next_bucket_id: next.id,
-      next_bucket_name: next.name,
-    });
     setSelectedBucketId(String(next.id));
   }, [buckets, bucketsQuery.isSuccess, locationReady, selectedBucketId]);
 
@@ -194,13 +168,6 @@ export function OneFileHome() {
       return;
     }
 
-    debugLog('home:persist-location', {
-      selected_bucket_id: selectedBucketId,
-      selected_address: selectedBucket
-        ? buildAddress(selectedBucket.name, selectedPrefix)
-        : null,
-      prefix_count: Object.keys(bucketPrefixes).length,
-    });
     writeStoredFileLocation({
       selectedBucketId,
       selectedAddress: selectedBucket
@@ -223,10 +190,6 @@ export function OneFileHome() {
 
       const bucketId = String(selectedBucket.id);
       const normalizedPrefix = normalizePrefix(nextPrefix);
-      debugLog('home:update-prefix', {
-        bucket_id: bucketId,
-        next_prefix: normalizedPrefix,
-      });
       setBucketPrefixes((current) =>
         current[bucketId] === normalizedPrefix
           ? current
@@ -241,10 +204,6 @@ export function OneFileHome() {
 
   const selectBucket = useCallback((bucketId: number | string) => {
     const nextBucketId = String(bucketId);
-    debugLog('home:select-bucket', {
-      bucket_id: nextBucketId,
-      reset_prefix: true,
-    });
     setSelectedBucketId(nextBucketId);
     setBucketPrefixes((current) =>
       current[nextBucketId]

@@ -1,4 +1,3 @@
-import BuildInfo from '@/components/build-info';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from 'sonner';
 
@@ -10,7 +9,6 @@ export function Providers({ children }: React.PropsWithChildren) {
     <QueryProvider>
       <ThemeProvider>
         <TooltipProvider>{children}</TooltipProvider>
-        <BuildInfo />
         <Toaster position="top-right" richColors />
       </ThemeProvider>
     </QueryProvider>

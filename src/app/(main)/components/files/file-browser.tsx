@@ -32,7 +32,6 @@ import {
 } from '@/components/ui/input-group';
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Spinner } from '@/components/ui/spinner';
-import { debugLog, debugLogLimited } from '@/lib/debug';
 import {
   useInfiniteQuery,
   useMutation,
@@ -107,37 +106,8 @@ export function FileBrowser({
 
   const loadMore = useCallback(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-    debugLog('file-browser:load-more', {
-      bucket_id: bucket?.id ?? null,
-      prefix,
-      search: deferredSearch.trim(),
-      page_count: filesQuery.data?.pages.length ?? 0,
-    });
     void fetchNextPage();
-  }, [
-    bucket?.id,
-    deferredSearch,
-    fetchNextPage,
-    filesQuery.data?.pages.length,
-    hasNextPage,
-    isFetchingNextPage,
-    prefix,
-  ]);
-
-  debugLogLimited('file-browser:render', {
-    bucket_id: bucket?.id ?? null,
-    prefix,
-    search,
-    deferred_search: deferredSearch,
-    status: filesQuery.status,
-    fetch_status: filesQuery.fetchStatus,
-    is_fetching: filesQuery.isFetching,
-    is_loading: filesQuery.isLoading,
-    is_fetching_next_page: filesQuery.isFetchingNextPage,
-    page_count: filesQuery.data?.pages.length ?? 0,
-    items_count: items.length,
-    has_next_page: filesQuery.hasNextPage,
-  });
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const deleteMutation = useMutation({
     mutationFn: (items: FileItem[]) =>
