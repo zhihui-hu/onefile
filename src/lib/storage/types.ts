@@ -9,10 +9,7 @@ export const STORAGE_PROVIDER_IDS = [
 
 export type StorageProviderId = (typeof STORAGE_PROVIDER_IDS)[number];
 
-const S3_COMPATIBLE_PROVIDER_IDS = ['s3', 'r2', 'b2', 'oci'] as const;
-
-export type S3CompatibleProviderId =
-  (typeof S3_COMPATIBLE_PROVIDER_IDS)[number];
+export type S3CompatibleProviderId = 's3' | 'r2' | 'b2' | 'oci';
 
 type StorageObjectKind = 'directory' | 'file';
 
