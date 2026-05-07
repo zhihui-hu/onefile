@@ -1,20 +1,84 @@
-# OneFile - 轻量对象存储图床和上传管理后台
+<p align="center">
+  <img src="https://img.huzhihui.com/uploads/2026/05/pwa-512x512.png" width="112" height="112" alt="OneFile Logo" />
+</p>
 
-<p align="left">
+<h1 align="center">OneFile</h1>
+
+<p align="center">
+  轻量、可自托管的多云对象存储上传与管理平台。
+  <br />
+  用一个网页和一组 API key，把 S3、R2、B2、OCI、OSS、COS 聚合成统一的图床和文件上传入口。
+</p>
+
+<p align="center">
+  <a href="https://onefile.huzhihui.com">在线预览</a>
+  ·
+  <a href="#快速开始">快速开始</a>
+  ·
+  <a href="#图床集成">图床集成</a>
+  ·
+  <a href="#支持的存储">支持的存储</a>
+  ·
+  <a href="#许可证">许可证</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/React-19-282C34?logo=react&logoColor=61DAFB" alt="React 19" />
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/shadcn/ui-black?style=flat&logo=vercel&logoColor=white" alt="shadcn/ui" />
+  <img src="https://img.shields.io/badge/shadcn/ui-111827?logo=shadcnui&logoColor=white" alt="shadcn/ui" />
   <img src="https://img.shields.io/badge/TanStack_Query-v5-FF4154?logo=tanstack&logoColor=white" alt="TanStack Query" />
   <img src="https://img.shields.io/badge/TanStack_Table-v8-FF4154?logo=tanstack&logoColor=white" alt="TanStack Table" />
   <img src="https://img.shields.io/badge/SQLite-lightweight-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
 </p>
 
-OneFile 是一个很轻的对象存储上传后台。它适合拿来做自建图床、文件投递入口，或者统一管理多家对象存储。
+OneFile 是一个很轻的对象存储上传后台，适合拿来做自建图床、文件投递入口，或者统一管理多家对象存储。你可以把 AWS S3、Cloudflare R2、Backblaze B2、Oracle Object Storage、阿里云 OSS、腾讯云 COS 接到一个页面里，通过网页上传和管理文件；也可以生成 API key，把上传能力快速接进图床项目、Markdown 编辑器、脚本、CI 或第三方系统。
 
-你可以把 S3、R2、B2、OCI、阿里云 OSS、腾讯云 COS 接到一个页面里，通过网页上传和管理文件；也可以生成 API key，把上传能力快速接进图床项目、Markdown 编辑器、脚本、CI 或第三方系统。
+## 功能概览
+
+| 能力                 | 说明                                                                     |
+| -------------------- | ------------------------------------------------------------------------ |
+| 多云存储统一管理     | 在一个后台维护多个对象存储账号、bucket、公开访问域名和上传策略。         |
+| 网页上传和文件浏览   | 支持上传、目录浏览、搜索、预览、复制链接、删除文件。                     |
+| API key 上传         | 给图床、Markdown 编辑器、脚本、CI、第三方系统提供统一上传入口。          |
+| 公开上传页           | 生成可分享的上传入口，支持二维码分享，不暴露后台账号和 raw API key。     |
+| 图片压缩             | API 上传和公开上传可启用 WebP 压缩，适合博客、论坛、文档图片流。         |
+| 大文件上传           | 提供 multipart 上传接口，服务端统一处理分片上传、完成和中止流程。        |
+| 轻量部署和迁移       | 默认 SQLite + Docker volume，支持 SQL 导入导出和应用密钥迁移。           |
+| 自动 bucket 负载均衡 | API key 不固定 bucket 时，服务端会在当前用户可用 bucket 中自动选择目标。 |
+
+## 产品预览
+
+后台围绕“存储账号、bucket、文件、API key、公开上传入口”组织，适合日常反复上传和管理图片、附件、构建产物或临时投递文件。
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>文件管理</strong>
+      <br />
+      <img src="https://img.huzhihui.com/uploads/2026/05/onefile-1.png" alt="OneFile 界面截图 1" />
+    </td>
+    <td width="50%">
+      <strong>对象存储配置</strong>
+      <br />
+      <img src="https://img.huzhihui.com/uploads/2026/05/onefile-2.png" alt="OneFile 界面截图 2" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>API key 和上传策略</strong>
+      <br />
+      <img src="https://img.huzhihui.com/uploads/2026/05/onefile-3.png" alt="OneFile 界面截图 3" />
+    </td>
+    <td width="50%">
+      <strong>公开上传页面</strong>
+      <br />
+      <img src="https://img.huzhihui.com/uploads/2026/05/onefile-4.png" alt="OneFile 界面截图 4" />
+    </td>
+  </tr>
+</table>
 
 ## 项目亮点
 
@@ -325,6 +389,3 @@ pnpm lint
 ## 安全提示
 
 OneFile 会保存对象存储访问凭证和 API key 信息。生产部署请妥善保护 `.env`、`/app/data/.onefile-secret` 和 SQLite 数据库，并优先通过 HTTPS 和反向代理对外提供服务。
-
-aibLsY2a5_pvihtXWDV7_cjlCi56Z9scdLz
-vQFPn3077KHSchoANDbncA1ZseaziduJU2jwCFUs5A8
