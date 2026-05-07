@@ -325,3 +325,6 @@ pnpm lint
 ## 安全提示
 
 OneFile 会保存对象存储访问凭证和 API key 信息。生产部署请妥善保护 `.env`、`/app/data/.onefile-secret` 和 SQLite 数据库，并优先通过 HTTPS 和反向代理对外提供服务。
+
+aibLsY2a5_pvihtXWDV7_cjlCi56Z9scdLz
+vQFPn3077KHSchoANDbncA1ZseaziduJU2jwCFUs5A8
