@@ -63,6 +63,13 @@ export function tokenDisplay(apiKey: FileApiKey) {
 }
 
 export function apiDocsUrl(apiKey: FileApiKey) {
+  if (apiKey.status === 'inactive') return '';
+
+  const params = new URLSearchParams();
   const token = keyToken(apiKey);
-  return token ? `/api-docs?key=${encodeURIComponent(token)}` : '/api-docs';
+  if (token) params.set('key', token);
+  if (apiKey.public_upload_uuid) params.set('uuid', apiKey.public_upload_uuid);
+
+  const query = params.toString();
+  return query ? `/api-docs?${query}` : '';
 }

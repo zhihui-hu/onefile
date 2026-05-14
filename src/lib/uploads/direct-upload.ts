@@ -21,6 +21,7 @@ import { NextRequest } from 'next/server';
 
 const ONE_MIB = 1024 * 1024;
 const MAX_DIRECT_UPLOAD_SIZE = 100 * ONE_MIB;
+const HEADER_SAFE_VALUE = /^[\x20-\x7e]*$/;
 
 type DirectUploadStrategy = {
   bucketId?: number | string | null;
@@ -79,6 +80,25 @@ function publicObjectUrl({
     .join('/');
 
   return encodedKey ? `${base}/${encodedKey}` : base;
+}
+
+function metadataHeaderValue(value: string) {
+  return HEADER_SAFE_VALUE.test(value) ? value : encodeURIComponent(value);
+}
+
+function compressedImageMetadata(
+  originalMimeType: string,
+  originalFilename: string,
+) {
+  const originalFilenameMetadata = metadataHeaderValue(originalFilename);
+
+  return {
+    'onefile-original-mime-type': metadataHeaderValue(originalMimeType),
+    'onefile-original-filename': originalFilenameMetadata,
+    ...(originalFilenameMetadata !== originalFilename
+      ? { 'onefile-original-filename-encoding': 'uri-component' }
+      : {}),
+  };
 }
 
 async function chooseUploadBucket(
@@ -212,10 +232,7 @@ export async function handleDirectUpload(
     contentLength: body.byteLength,
     preventOverwrite: true,
     metadata: shouldCompress
-      ? {
-          'onefile-original-mime-type': originalMimeType,
-          'onefile-original-filename': originalFilename,
-        }
+      ? compressedImageMetadata(originalMimeType, originalFilename)
       : undefined,
   });
   const uploadId = randomToken(18);

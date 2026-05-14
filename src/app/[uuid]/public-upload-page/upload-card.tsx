@@ -3,6 +3,7 @@ import {
   formatBytes,
   formatDate,
 } from '@/app/(main)/components/format';
+import { QrCodeDialog } from '@/components/qr-code-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,7 +18,6 @@ import { Copy, ImageIcon, QrCode } from 'lucide-react';
 import Image from 'next/image';
 import { useState } from 'react';
 
-import { QrCodeDialog } from './qr-code-dialog';
 import type { ImageDimensions, StoredUpload } from './types';
 import {
   IMAGE_BLUR_DATA_URL,
@@ -154,7 +154,8 @@ export function UploadCard({
       </Card>
       {upload.url && (
         <QrCodeDialog
-          uploadName={upload.name}
+          title="访问二维码"
+          description={upload.name}
           url={upload.url}
           open={qrOpen}
           onOpenChange={setQrOpen}

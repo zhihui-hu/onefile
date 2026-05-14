@@ -5,6 +5,8 @@ import type {
   FileApiKey,
   FileApiKeyLinkAction,
 } from '@/app/(main)/components/types';
+import { QrCodeDialog } from '@/components/qr-code-dialog';
+import { TanStackDataTable } from '@/components/table/tanstack-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,17 +25,8 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { OverflowTooltipText } from '@/components/ui/overflow-tooltip-text';
-import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Tooltip,
   TooltipContent,
@@ -41,7 +34,6 @@ import {
 } from '@/components/ui/tooltip';
 import {
   createColumnHelper,
-  flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -57,7 +49,6 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { useMemo, useState } from 'react';
 
 import { apiDocsUrl, keyToken, publicLink, tokenDisplay } from './utils';
@@ -193,6 +184,7 @@ export function ApiKeyTable({
           const apiKey = row.original;
           const link = publicLink(apiKey);
           const docsUrl = apiDocsUrl(apiKey);
+          const canOpenDocs = Boolean(docsUrl);
 
           return (
             <div className="flex items-center justify-end gap-1">
@@ -238,7 +230,9 @@ export function ApiKeyTable({
                       二维码
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                      disabled={!canOpenDocs}
                       onSelect={() => {
+                        if (!docsUrl) return;
                         window.open(docsUrl, '_blank', 'noopener,noreferrer');
                       }}
                     >
@@ -345,109 +339,20 @@ export function ApiKeyTable({
   return (
     <>
       <div className="max-h-[58vh] overflow-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <TanStackDataTable table={table} />
       </div>
-      <PublicLinkQrDialog
-        name={qrTarget?.name ?? ''}
+      <QrCodeDialog
+        title="公开链接二维码"
+        description={qrTarget?.name ?? ''}
         url={qrTarget?.url ?? ''}
         open={Boolean(qrTarget)}
         onOpenChange={(open) => {
           if (!open) setQrTarget(null);
         }}
+        copyMessage="已复制公开上传链接"
+        showOpenButton
         onCopy={copyText}
       />
     </>
-  );
-}
-
-function PublicLinkQrDialog({
-  name,
-  url,
-  open,
-  onOpenChange,
-  onCopy,
-}: {
-  name: string;
-  url: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCopy: (value: string, message: string) => void;
-}) {
-  return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialog.Content
-        className="sm:max-w-sm"
-        drawerClassName="max-h-[92vh]"
-      >
-        <ResponsiveDialog.Header className="p-0 text-left">
-          <ResponsiveDialog.Title>公开链接二维码</ResponsiveDialog.Title>
-          <ResponsiveDialog.Description className="break-all">
-            {name || url}
-          </ResponsiveDialog.Description>
-        </ResponsiveDialog.Header>
-        <div className="flex flex-col items-center gap-4">
-          <div className="rounded-lg border bg-background p-3">
-            {url && (
-              <QRCodeSVG
-                value={url}
-                size={220}
-                marginSize={1}
-                className="size-56 max-w-full"
-              />
-            )}
-          </div>
-          <div className="max-w-full break-all rounded-md bg-muted p-2 text-xs text-muted-foreground">
-            {url}
-          </div>
-        </div>
-        <ResponsiveDialog.Footer className="p-2">
-          <Button
-            variant="outline"
-            disabled={!url}
-            onClick={() => onCopy(url, '已复制公开上传链接')}
-          >
-            <Copy data-icon="inline-start" />
-            复制地址
-          </Button>
-          <Button
-            disabled={!url}
-            onClick={() => {
-              window.open(url, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            <ExternalLink data-icon="inline-start" />
-            打开链接
-          </Button>
-        </ResponsiveDialog.Footer>
-      </ResponsiveDialog.Content>
-    </ResponsiveDialog>
   );
 }

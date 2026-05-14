@@ -1,20 +1,28 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
-import { Copy } from 'lucide-react';
+import { Copy, ExternalLink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 type QrCodeDialogProps = {
-  uploadName: string;
+  title: string;
+  description: string;
   url: string;
   open: boolean;
+  copyMessage?: string;
+  showOpenButton?: boolean;
   onOpenChange: (open: boolean) => void;
-  onCopy: (value: string, message?: string) => void;
+  onCopy: (value: string, message: string) => void;
 };
 
 export function QrCodeDialog({
-  uploadName,
+  title,
+  description,
   url,
   open,
+  copyMessage = '已复制完整地址',
+  showOpenButton = false,
   onOpenChange,
   onCopy,
 }: QrCodeDialogProps) {
@@ -25,19 +33,21 @@ export function QrCodeDialog({
         drawerClassName="max-h-[92vh]"
       >
         <ResponsiveDialog.Header className="p-0 text-left">
-          <ResponsiveDialog.Title>访问二维码</ResponsiveDialog.Title>
+          <ResponsiveDialog.Title>{title}</ResponsiveDialog.Title>
           <ResponsiveDialog.Description className="break-all">
-            {uploadName}
+            {description || url}
           </ResponsiveDialog.Description>
         </ResponsiveDialog.Header>
         <div className="flex flex-col items-center gap-4">
           <div className="rounded-lg border bg-background p-3">
-            <QRCodeSVG
-              value={url}
-              size={220}
-              marginSize={1}
-              className="size-56 max-w-full"
-            />
+            {url && (
+              <QRCodeSVG
+                value={url}
+                size={220}
+                marginSize={1}
+                className="size-56 max-w-full"
+              />
+            )}
           </div>
           <div className="max-w-full break-all rounded-md bg-muted p-2 text-xs text-muted-foreground">
             {url}
@@ -47,11 +57,22 @@ export function QrCodeDialog({
           <Button
             variant="outline"
             disabled={!url}
-            onClick={() => onCopy(url, '已复制完整地址')}
+            onClick={() => onCopy(url, copyMessage)}
           >
             <Copy data-icon="inline-start" />
             复制地址
           </Button>
+          {showOpenButton && (
+            <Button
+              disabled={!url}
+              onClick={() => {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }}
+            >
+              <ExternalLink data-icon="inline-start" />
+              打开链接
+            </Button>
+          )}
         </ResponsiveDialog.Footer>
       </ResponsiveDialog.Content>
     </ResponsiveDialog>

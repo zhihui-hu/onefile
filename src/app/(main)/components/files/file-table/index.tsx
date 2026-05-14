@@ -3,22 +3,12 @@
 import {
   DirectoryContextMenuContent,
   FileContextMenuContent,
-  FileDropdownMenu,
-  NameCell,
-  SortHeader,
   publicObjectUrl,
   tableColumnClass,
 } from '@/app/(main)/components/files/file-table/parts';
 import { FileTableSkeleton } from '@/app/(main)/components/files/file-table/skeleton';
-import {
-  absoluteDate,
-  formatBytes,
-  formatDate,
-} from '@/app/(main)/components/format';
 import type { FileItem, StorageBucket } from '@/app/(main)/components/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import {
   Empty,
@@ -27,12 +17,10 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { ResponsiveDialog } from '@/components/ui/responsive-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
-  type ColumnDef,
   type RowSelectionState,
   type SortingState,
   flexRender,
@@ -40,13 +28,32 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AlertTriangle, Folder, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Folder } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-function fileTypeLabel(item: FileItem) {
-  return item.kind === 'folder' ? '目录' : '文件';
-}
+import { useFileTableColumns } from './columns';
+import { BulkFileDeleteDialog, SingleFileDeleteDialog } from './delete-dialogs';
+import { FileSelectionBar } from './selection-bar';
+import { useFileTableLoadMore } from './use-load-more';
+
+type FileTableProps = {
+  bucket: StorageBucket | null;
+  items: FileItem[];
+  loading: boolean;
+  error?: string | null;
+  deleting: boolean;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  selectionResetKey?: string;
+  refreshing?: boolean;
+  creatingFolder?: boolean;
+  onLoadMore?: () => void;
+  onRefresh?: () => void;
+  onCreateFolder?: () => void;
+  onOpenFolder: (item: FileItem) => void;
+  onDeleteFiles: (items: FileItem[]) => void;
+};
 
 export function FileTable({
   bucket,
@@ -64,43 +71,25 @@ export function FileTable({
   onCreateFolder,
   onOpenFolder,
   onDeleteFiles,
-}: {
-  bucket: StorageBucket | null;
-  items: FileItem[];
-  loading: boolean;
-  error?: string | null;
-  deleting: boolean;
-  hasMore?: boolean;
-  loadingMore?: boolean;
-  selectionResetKey?: string;
-  refreshing?: boolean;
-  creatingFolder?: boolean;
-  onLoadMore?: () => void;
-  onRefresh?: () => void;
-  onCreateFolder?: () => void;
-  onOpenFolder: (item: FileItem) => void;
-  onDeleteFiles: (items: FileItem[]) => void;
-}) {
+}: FileTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'updated_at', desc: true },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [deleteTarget, setDeleteTarget] = useState<FileItem | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const loadMoreRef = useRef<HTMLTableRowElement | null>(null);
-  const loadMoreRequestedRef = useRef(false);
+  const { scrollRootRef, loadMoreRef } = useFileTableLoadMore({
+    hasMore,
+    itemCount: items.length,
+    loading,
+    loadingMore,
+    onLoadMore,
+  });
 
   useEffect(() => {
     setRowSelection({});
     setBulkDeleteOpen(false);
   }, [selectionResetKey]);
-
-  useEffect(() => {
-    if (!loadingMore) {
-      loadMoreRequestedRef.current = false;
-    }
-  }, [loadingMore]);
 
   const copyLink = useCallback(async (url: string | null) => {
     if (!url) return;
@@ -127,101 +116,14 @@ export function FileTable({
     [onOpenFolder],
   );
 
-  const columns = useMemo<ColumnDef<FileItem>[]>(
-    () => [
-      {
-        id: 'select',
-        header: ({ table }) => (
-          <Checkbox
-            aria-label="选择全部文件"
-            disabled={
-              !table.getRowModel().rows.some((row) => row.getCanSelect())
-            }
-            checked={
-              table.getIsAllRowsSelected()
-                ? true
-                : table.getIsSomeRowsSelected()
-                  ? 'indeterminate'
-                  : false
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllRowsSelected(Boolean(value))
-            }
-          />
-        ),
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Checkbox
-            aria-label={`选择 ${row.original.name || row.original.path}`}
-            checked={row.getIsSelected()}
-            disabled={!row.getCanSelect()}
-            onClick={(event) => event.stopPropagation()}
-            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-          />
-        ),
-      },
-      {
-        id: 'name',
-        accessorKey: 'name',
-        header: '名称',
-        enableSorting: false,
-        cell: ({ row }) => {
-          const item = row.original;
-          return (
-            <NameCell
-              item={item}
-              previewUrl={publicObjectUrl(bucket, item)}
-              onOpenFolder={onOpenFolder}
-            />
-          );
-        },
-      },
-      {
-        id: 'kind',
-        accessorKey: 'kind',
-        header: '类型',
-        cell: ({ row }) => fileTypeLabel(row.original),
-      },
-      {
-        id: 'size',
-        accessorFn: (row) => (row.kind === 'folder' ? -1 : (row.size ?? 0)),
-        header: ({ column }) => <SortHeader column={column} label="大小" />,
-        cell: ({ row }) =>
-          row.original.kind === 'folder' ? '-' : formatBytes(row.original.size),
-      },
-      {
-        id: 'updated_at',
-        accessorFn: (row) =>
-          row.updated_at ? Date.parse(row.updated_at) || 0 : 0,
-        header: ({ column }) => <SortHeader column={column} label="修改日期" />,
-        cell: ({ row }) => (
-          <span title={absoluteDate(row.original.updated_at)}>
-            {formatDate(row.original.updated_at)}
-          </span>
-        ),
-      },
-      {
-        id: 'actions',
-        header: '',
-        enableSorting: false,
-        cell: ({ row }) => {
-          const item = row.original;
-          const publicUrl = publicObjectUrl(bucket, item);
-          return (
-            <FileDropdownMenu
-              item={item}
-              publicUrl={publicUrl}
-              deleting={deleting}
-              onOpen={() => openItem(item, publicUrl)}
-              onCopy={() => void copyLink(publicUrl)}
-              onRequestDelete={() => setDeleteTarget(item)}
-            />
-          );
-        },
-      },
-    ],
-    [bucket, copyLink, deleting, onOpenFolder, openItem],
-  );
+  const columns = useFileTableColumns({
+    bucket,
+    deleting,
+    onCopyLink: (url) => void copyLink(url),
+    onOpenFolder,
+    onOpenItem: openItem,
+    onRequestDelete: setDeleteTarget,
+  });
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -243,55 +145,6 @@ export function FileTable({
   const visibleColumnCount = table.getVisibleFlatColumns().length;
   const directoryMenuEnabled =
     selectedFiles.length === 0 && Boolean(onRefresh || onCreateFolder);
-
-  useEffect(() => {
-    if (!hasMore || loading || loadingMore || !onLoadMore) return;
-
-    const target = loadMoreRef.current;
-    if (!target) return;
-
-    const root = scrollRootRef.current;
-
-    if (typeof IntersectionObserver === 'undefined') {
-      if (!root) return;
-
-      const requestLoadMore = () => {
-        if (loadMoreRequestedRef.current) return;
-        loadMoreRequestedRef.current = true;
-        onLoadMore();
-      };
-
-      const loadIfNearBottom = () => {
-        const remaining =
-          root.scrollHeight - root.scrollTop - root.clientHeight;
-        if (remaining <= 180) {
-          requestLoadMore();
-        }
-      };
-
-      root.addEventListener('scroll', loadIfNearBottom, { passive: true });
-      loadIfNearBottom();
-
-      return () => root.removeEventListener('scroll', loadIfNearBottom);
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          if (loadMoreRequestedRef.current) return;
-          loadMoreRequestedRef.current = true;
-          onLoadMore();
-        }
-      },
-      {
-        root,
-        rootMargin: '180px 0px',
-      },
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [hasMore, items.length, loading, loadingMore, onLoadMore]);
 
   if (error) {
     return (
@@ -447,115 +300,31 @@ export function FileTable({
             </ContextMenu>
           )}
         </div>
-        {selectedFiles.length > 0 && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-lg border bg-background p-2 shadow-lg">
-              <span className="px-2 text-sm text-muted-foreground">
-                已选择 {selectedFiles.length} 个文件
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setRowSelection({})}
-              >
-                <X data-icon="inline-start" />
-                取消
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={deleting}
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 data-icon="inline-start" />
-                删除
-              </Button>
-            </div>
-          </div>
-        )}
+        <FileSelectionBar
+          deleting={deleting}
+          selectedFiles={selectedFiles}
+          onClearSelection={() => setRowSelection({})}
+          onOpenBulkDelete={() => setBulkDeleteOpen(true)}
+        />
       </div>
-      <ResponsiveDialog
-        open={Boolean(deleteTarget)}
+      <SingleFileDeleteDialog
+        deleteTarget={deleteTarget}
+        deleting={deleting}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             setDeleteTarget(null);
           }
         }}
-      >
-        <ResponsiveDialog.Content
-          className="sm:max-w-md"
-          drawerClassName="max-h-[92vh]"
-        >
-          <ResponsiveDialog.Header className="p-0 text-left">
-            <ResponsiveDialog.Title>删除对象</ResponsiveDialog.Title>
-            <ResponsiveDialog.Description>
-              将直接从当前 bucket 删除 {deleteTarget?.path}。
-            </ResponsiveDialog.Description>
-          </ResponsiveDialog.Header>
-          <ResponsiveDialog.Footer className="p-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={deleting}
-              onClick={() => setDeleteTarget(null)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleting}
-              onClick={() => {
-                if (!deleteTarget) return;
-                onDeleteFiles([deleteTarget]);
-                setDeleteTarget(null);
-              }}
-            >
-              <Trash2 data-icon="inline-start" />
-              删除
-            </Button>
-          </ResponsiveDialog.Footer>
-        </ResponsiveDialog.Content>
-      </ResponsiveDialog>
-
-      <ResponsiveDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <ResponsiveDialog.Content
-          className="sm:max-w-md"
-          drawerClassName="max-h-[92vh]"
-        >
-          <ResponsiveDialog.Header className="p-0 text-left">
-            <ResponsiveDialog.Title>批量删除文件</ResponsiveDialog.Title>
-            <ResponsiveDialog.Description>
-              将直接从当前 bucket 删除已选择的 {selectedFiles.length} 个文件。
-            </ResponsiveDialog.Description>
-          </ResponsiveDialog.Header>
-          <ResponsiveDialog.Footer className="p-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={deleting}
-              onClick={() => setBulkDeleteOpen(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleting || selectedFiles.length === 0}
-              onClick={() => {
-                const files = selectedFiles;
-                if (!files.length) return;
-                onDeleteFiles(files);
-                setBulkDeleteOpen(false);
-                setRowSelection({});
-              }}
-            >
-              <Trash2 data-icon="inline-start" />
-              删除 {selectedFiles.length} 个文件
-            </Button>
-          </ResponsiveDialog.Footer>
-        </ResponsiveDialog.Content>
-      </ResponsiveDialog>
+        onDeleteFiles={onDeleteFiles}
+      />
+      <BulkFileDeleteDialog
+        open={bulkDeleteOpen}
+        deleting={deleting}
+        selectedFiles={selectedFiles}
+        onOpenChange={setBulkDeleteOpen}
+        onDeleteFiles={onDeleteFiles}
+        setRowSelection={setRowSelection}
+      />
     </TooltipProvider>
   );
 }

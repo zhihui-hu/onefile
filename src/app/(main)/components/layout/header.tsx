@@ -20,7 +20,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { IMAGE_BLUR_DATA_URL } from '@/lib/image';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BookOpenText,
   Database,
   DatabaseBackup,
   KeyRound,
@@ -87,18 +86,6 @@ export function OneFileHeader() {
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggleButton />
 
-          <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
-            <Link
-              href="/api-docs"
-              target="_blank"
-              rel="noreferrer"
-              prefetch={false}
-            >
-              <BookOpenText data-icon="inline-start" />
-              API 文档
-            </Link>
-          </Button>
-
           {meQuery.isLoading ? (
             <Skeleton className="size-8 rounded-full" />
           ) : user ? (
@@ -152,12 +139,6 @@ export function OneFileHeader() {
                       导入导出
                     </DropdownMenuItem>
                   )}
-                  {/* <DropdownMenuItem asChild>
-                    <Link href="/api-docs" target="_blank" rel="noreferrer">
-                      <BookOpenText />
-                      API 文档
-                    </Link>
-                  </DropdownMenuItem> */}
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

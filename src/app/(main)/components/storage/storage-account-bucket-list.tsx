@@ -4,6 +4,7 @@ import type {
   StorageAccount,
   StorageBucket,
 } from '@/app/(main)/components/types';
+import { TanStackDataTable } from '@/components/table/tanstack-table';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -16,14 +17,6 @@ import {
 import { OverflowTooltipText } from '@/components/ui/overflow-tooltip-text';
 import { Spinner } from '@/components/ui/spinner';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -32,7 +25,6 @@ import {
 import { cn } from '@/lib/utils';
 import {
   type ColumnDef,
-  flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -248,49 +240,20 @@ export function StorageAccountBucketList({
 
   return (
     <TooltipProvider>
-      <Table className="table-fixed">
-        <colgroup>
-          {table.getAllLeafColumns().map((column) => (
-            <col key={column.id} className={bucketColumnClass(column.id)} />
-          ))}
-        </colgroup>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead
-                  key={header.id}
-                  className={cn(header.column.id === 'actions' && 'text-right')}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <TableCell
-                  key={cell.id}
-                  className={cn(
-                    cell.column.id !== 'actions' && 'min-w-0',
-                    cell.column.id === 'actions' && 'text-right',
-                  )}
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <TanStackDataTable
+        table={table}
+        className="table-fixed"
+        colClassName={bucketColumnClass}
+        headerClassName={(header) =>
+          cn(header.column.id === 'actions' && 'text-right')
+        }
+        cellClassName={(cell) =>
+          cn(
+            cell.column.id !== 'actions' && 'min-w-0',
+            cell.column.id === 'actions' && 'text-right',
+          )
+        }
+      />
     </TooltipProvider>
   );
 }

@@ -44,12 +44,16 @@ const endpoints = [
   ['POST', '/api/uploads/:id/abort', 'uploads:write', '取消分片上传'],
 ] as const;
 
+const apiKeyEndpoints = endpoints.filter(
+  ([, path]) => !path.startsWith('/api/public-uploads/'),
+);
+const publicUploadEndpoints = endpoints.filter(([, path]) =>
+  path.startsWith('/api/public-uploads/'),
+);
+
 type PageProps = {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 };
-
-const fallbackApiKey =
-  'ofk_example010_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV';
 
 function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -59,6 +63,12 @@ function apiKeyFromSearchParams(searchParams: {
   [key: string]: string | string[] | undefined;
 }) {
   return firstSearchParam(searchParams.key)?.trim().slice(0, 240);
+}
+
+function publicUploadUuidFromSearchParams(searchParams: {
+  [key: string]: string | string[] | undefined;
+}) {
+  return firstSearchParam(searchParams.uuid)?.trim().slice(0, 80);
 }
 
 function shellDoubleQuoted(value: string) {
@@ -142,11 +152,53 @@ function CodeBlock({ children }: { children: string }) {
 export default async function Page({ searchParams }: PageProps) {
   const pageOrigin = pageOriginFromHeaders(await headers());
   const apiUrl = (path: string) => urlFromOrigin(pageOrigin, path);
-  const apiKey =
-    apiKeyFromSearchParams((await searchParams) ?? {}) || fallbackApiKey;
-  const authHeader = `Authorization: Bearer ${apiKey}`;
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const apiKey = apiKeyFromSearchParams(resolvedSearchParams);
+  const publicUploadUuid =
+    publicUploadUuidFromSearchParams(resolvedSearchParams) ??
+    '00000000-0000-0000-0000-000000000000';
+  const hasApiKeyContext = Boolean(apiKey);
+  const hasPublicUploadContext =
+    publicUploadUuid !== '00000000-0000-0000-0000-000000000000';
+  const hasApiContext = hasApiKeyContext || hasPublicUploadContext;
+  const authHeader = apiKey ? `Authorization: Bearer ${apiKey}` : '';
   const curlAuthHeader = shellDoubleQuoted(authHeader);
-  const hasRealApiKey = apiKey !== fallbackApiKey;
+  const visibleEndpoints = hasApiKeyContext
+    ? hasPublicUploadContext
+      ? endpoints
+      : apiKeyEndpoints
+    : hasPublicUploadContext
+      ? publicUploadEndpoints
+      : [];
+
+  if (!hasApiContext) {
+    return (
+      <main className="h-full w-full overflow-auto">
+        <article className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-4 py-8 leading-7">
+          <p className="mb-8">
+            <Link
+              className="text-sm text-muted-foreground underline"
+              href="/"
+              prefetch={false}
+            >
+              返回文件管理器
+            </Link>
+          </p>
+
+          <h1 className="text-3xl font-semibold">OneFile API 文档</h1>
+          <p className="mt-4 text-muted-foreground">
+            API 文档主要服务于已经开启的 API key
+            或公开上传链接。请先在文件管理器右上角用户菜单进入 API
+            KEY，创建并启用 key 后，从对应 key 的操作菜单打开 API 文档。
+          </p>
+          <p className="mt-4 text-muted-foreground">
+            从具体 key 打开时，页面会自动带入可用 token 或公开上传
+            UUID，并只展示当前密钥页面相关的调用示例。
+          </p>
+        </article>
+      </main>
+    );
+  }
 
   return (
     <main className="h-full w-full overflow-auto">
@@ -166,37 +218,41 @@ export default async function Page({ searchParams }: PageProps) {
         <p className="mt-4 text-muted-foreground">
           API key 面向脚本和外部服务；这里仅列出外部调用需要的 API key
           接口，以及 API key 派生的公开上传接口。网页登录、API key
-          创建/编辑/删除等系统自用接口不在此文档中展示。示例地址来自当前网页。
+          创建/编辑/删除等系统自用接口不在此文档中展示。示例地址来自当前已开启密钥页面。
         </p>
 
         <h2 className="mt-10 text-xl font-semibold">认证</h2>
 
-        <p>
-          除公开上传链接外，请求时在 Header 中携带 API key。 公开上传链接使用
-          URL 中的 UUID，不需要暴露 raw key。
-        </p>
+        {hasApiKeyContext ? (
+          <>
+            <p>
+              除公开上传链接外，请求时在 Header 中携带 API key。
+              公开上传链接使用 URL 中的 UUID，不需要暴露 raw key。
+            </p>
 
-        <CodeBlock>{authHeader}</CodeBlock>
+            <CodeBlock>{authHeader}</CodeBlock>
+          </>
+        ) : (
+          <p>
+            当前只展示公开上传链接接口。公开上传链接使用 URL 中的
+            UUID，不需要暴露 raw key。
+          </p>
+        )}
 
-        <p>
-          在 API key 管理里创建 key 后，可以从列表复制完整
-          token，也可以从操作菜单打开 API 文档。新生成的 key 会保存 hash
-          和加密后的完整值；迁移前的历史 key
-          如果没有完整值，只能显示前缀，需要重新创建一个新 key。
-        </p>
-
-        {hasRealApiKey ? (
+        {hasApiKeyContext ? (
           <p className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-            当前页面示例已使用传入的真实 key。
+            当前页面示例已使用传入的已开启 key。
           </p>
         ) : null}
 
-        <p>
-          <code>files:read</code> 可列 bucket 和浏览文件；
-          <code>files:write</code> 可创建目录，历史 key 如果已有该 scope
-          也会被视为具备上传写入权限；<code>files:delete</code> 可删除对象；
-          <code>uploads:write</code> 可上传文件。
-        </p>
+        {hasApiKeyContext ? (
+          <p>
+            <code>files:read</code> 可列 bucket 和浏览文件；
+            <code>files:write</code> 可创建目录，历史 key 如果已有该 scope
+            也会被视为具备上传写入权限；<code>files:delete</code> 可删除对象；
+            <code>uploads:write</code> 可上传文件。
+          </p>
+        ) : null}
 
         <h2 className="mt-10 text-xl font-semibold">统一响应</h2>
 
@@ -226,7 +282,11 @@ export default async function Page({ searchParams }: PageProps) {
 
         <h2 className="mt-10 text-xl font-semibold">端点</h2>
 
-        <p>下列端点支持 Bearer API key，或使用 API key 派生的公开上传 UUID。</p>
+        <p>
+          {hasApiKeyContext
+            ? '下列端点支持 Bearer API key，或使用 API key 派生的公开上传 UUID。'
+            : '当前页面只展示这个公开上传 UUID 可调用的端点。'}
+        </p>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -239,7 +299,7 @@ export default async function Page({ searchParams }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {endpoints.map(([method, path, scope, description]) => (
+              {visibleEndpoints.map(([method, path, scope, description]) => (
                 <tr key={`${method}-${path}`}>
                   <td className="border px-3 py-2 align-top">{method}</td>
                   <td className="border px-3 py-2 align-top">
@@ -255,45 +315,47 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        <h2 className="mt-10 text-xl font-semibold">Bucket 与文件</h2>
+        {hasApiKeyContext ? (
+          <>
+            <h2 className="mt-10 text-xl font-semibold">Bucket 与文件</h2>
 
-        <p>删除基于 bucket_id 和 object_key，不依赖本地 file id。</p>
+            <p>删除基于 bucket_id 和 object_key，不依赖本地 file id。</p>
 
-        <h3 className="mt-6 font-semibold">列出 bucket</h3>
+            <h3 className="mt-6 font-semibold">列出 bucket</h3>
 
-        <CodeBlock>{`curl -H "${curlAuthHeader}" \\
+            <CodeBlock>{`curl -H "${curlAuthHeader}" \\
   ${apiUrl('/api/storage/buckets')}`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">浏览文件</h3>
+            <h3 className="mt-6 font-semibold">浏览文件</h3>
 
-        <CodeBlock>{`curl -H "${curlAuthHeader}" \\
+            <CodeBlock>{`curl -H "${curlAuthHeader}" \\
   "${apiUrl('/api/files?bucket_id=12&prefix=photos/&search=invoice')}"`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">创建目录</h3>
+            <h3 className="mt-6 font-semibold">创建目录</h3>
 
-        <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
+            <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"bucket_id":12,"prefix":"photos/","name":"2026"}' \\
   ${apiUrl('/api/files/folders')}`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">删除文件</h3>
+            <h3 className="mt-6 font-semibold">删除文件</h3>
 
-        <CodeBlock>{`curl -X DELETE -H "${curlAuthHeader}" \\
+            <CodeBlock>{`curl -X DELETE -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{"bucket_id":12,"object_key":"photos/a.png"}' \\
   ${apiUrl('/api/files')}`}</CodeBlock>
 
-        <h2 className="mt-10 text-xl font-semibold">上传</h2>
+            <h2 className="mt-10 text-xl font-semibold">上传</h2>
 
-        <p>
-          文件先传到 OneFile 服务端，再由服务端写入对象存储。小文件使用
-          <code>/api/uploads/direct</code> 一次提交；大文件先创建 multipart
-          会话，再逐片上传到服务端。
-        </p>
+            <p>
+              文件先传到 OneFile 服务端，再由服务端写入对象存储。小文件使用
+              <code>/api/uploads/direct</code> 一次提交；大文件先创建 multipart
+              会话，再逐片上传到服务端。
+            </p>
 
-        <h3 className="mt-6 font-semibold">创建分片上传会话</h3>
+            <h3 className="mt-6 font-semibold">创建分片上传会话</h3>
 
-        <CodeBlock>{`# 创建 multipart 会话
+            <CodeBlock>{`# 创建 multipart 会话
 curl -X POST -H "${curlAuthHeader}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -307,23 +369,24 @@ curl -X POST -H "${curlAuthHeader}" \\
   }' \\
   ${apiUrl('/api/uploads')}`}</CodeBlock>
 
-        <p>
-          响应会包含 <code>bucket_id</code>、<code>bucket_name</code>、
-          <code>object_key</code>、<code>part_size</code> 和{' '}
-          <code>total_parts</code>；后续完成或取消只需要使用返回的
-          <code>upload_id</code>。
-        </p>
+            <p>
+              响应会包含 <code>bucket_id</code>、<code>bucket_name</code>、
+              <code>object_key</code>、<code>part_size</code> 和{' '}
+              <code>total_parts</code>；后续完成或取消只需要使用返回的
+              <code>upload_id</code>。
+            </p>
 
-        <h3 className="mt-6 font-semibold">分片上传</h3>
+            <h3 className="mt-6 font-semibold">分片上传</h3>
 
-        <p>
-          分片上传规则与 S3 multipart 保持一致：part number 范围是 1 到
-          10000；每片大小为 5 MiB 到 5 GiB，最后一片可以小于 5 MiB；单对象最大 5
-          TiB，单次 PUT 最大 5 GiB。省略 <code>part_size</code> 时默认从 16 MiB
-          开始，并会自动增大以保证总 part 数不超过 10000。
-        </p>
+            <p>
+              分片上传规则与 S3 multipart 保持一致：part number 范围是 1 到
+              10000；每片大小为 5 MiB 到 5 GiB，最后一片可以小于 5
+              MiB；单对象最大 5 TiB，单次 PUT 最大 5 GiB。省略{' '}
+              <code>part_size</code> 时默认从 16 MiB 开始，并会自动增大以保证总
+              part 数不超过 10000。
+            </p>
 
-        <CodeBlock>{`# 1. 将每个分片提交给 OneFile 服务端
+            <CodeBlock>{`# 1. 将每个分片提交给 OneFile 服务端
 curl -X POST -H "${curlAuthHeader}" \\
   -F "part_number=1" \\
   -F "chunk=@part-0001" \\
@@ -340,18 +403,20 @@ curl -X POST -H "${curlAuthHeader}" \\
   }' \\
   ${apiUrl('/api/uploads/:id/complete')}`}</CodeBlock>
 
-        <h3 className="mt-6 font-semibold">API key 服务端上传</h3>
+            <h3 className="mt-6 font-semibold">API key 服务端上传</h3>
 
-        <p>
-          <code>/api/uploads/direct</code> 接收 <code>multipart/form-data</code>
-          ，适合脚本直接把文件交给 OneFile 服务端写入对象存储。使用 API key
-          调用时，bucket 和图片压缩策略来自创建 key 时保存的配置；不需要每次传{' '}
-          <code>bucket_id</code> 或 <code>compress</code>。未指定 bucket 的 key
-          会在可用 bucket 中做默认负载均衡。上传会经过服务端内存，当前限制 100
-          MiB；大文件请使用上面的服务端分片上传。
-        </p>
+            <p>
+              <code>/api/uploads/direct</code> 接收{' '}
+              <code>multipart/form-data</code>
+              ，适合脚本直接把文件交给 OneFile 服务端写入对象存储。使用 API key
+              调用时，bucket 和图片压缩策略来自创建 key
+              时保存的配置；不需要每次传 <code>bucket_id</code> 或{' '}
+              <code>compress</code>。未指定 bucket 的 key 会在可用 bucket
+              中做默认负载均衡。上传会经过服务端内存，当前限制 100
+              MiB；大文件请使用上面的服务端分片上传。
+            </p>
 
-        <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
+            <CodeBlock>{`curl -X POST -H "${curlAuthHeader}" \\
   -F "file=@./photo.png" \\
   ${apiUrl('/api/uploads/direct')}
 
@@ -365,19 +430,25 @@ curl -X POST -H "${curlAuthHeader}" \\
   },
   "error": null
 }`}</CodeBlock>
+          </>
+        ) : null}
 
-        <h3 className="mt-6 font-semibold">公开上传链接</h3>
+        {hasPublicUploadContext ? (
+          <>
+            <h3 className="mt-6 font-semibold">公开上传链接</h3>
 
-        <p>
-          创建 API key 后会生成一个公开上传 URL，最后一段是 UUID。浏览器打开{' '}
-          <code>/:uuid</code> 会进入只允许选择照片的上传页；脚本可直接 POST
-          文件到 <code>/api/public-uploads/:uuid</code>。撤销链接会清空 UUID
-          映射，旧链接无法再找到对应 API key。
-        </p>
+            <p>
+              创建 API key 后会生成一个公开上传 URL，最后一段是 UUID。浏览器打开{' '}
+              <code>/:uuid</code> 会进入只允许选择照片的上传页；脚本可直接 POST
+              文件到 <code>/api/public-uploads/:uuid</code>。撤销链接会清空 UUID
+              映射，旧链接无法再找到对应 API key。
+            </p>
 
-        <CodeBlock>{`curl -X POST \\
+            <CodeBlock>{`curl -X POST \\
   -F "file=@./archive.zip" \\
-  ${apiUrl('/api/public-uploads/00000000-0000-0000-0000-000000000000')}`}</CodeBlock>
+  ${apiUrl(`/api/public-uploads/${publicUploadUuid}`)}`}</CodeBlock>
+          </>
+        ) : null}
 
         <h2 className="mt-10 text-xl font-semibold">错误码</h2>
 
